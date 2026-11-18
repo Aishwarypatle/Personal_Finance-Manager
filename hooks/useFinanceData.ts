@@ -24,6 +24,7 @@ export function useFinanceData(notify: Notify) {
   const [groupExpenses, setGroupExpenses] = useState<GroupExpense[]>([]);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>('connecting');
   const [authReady, setAuthReady] = useState(false);
+  const [authEnabled, setAuthEnabled] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
 
@@ -92,6 +93,7 @@ export function useFinanceData(notify: Notify) {
         const authResponse = await fetch('/api/auth');
         if (!authResponse.ok) throw new Error('Authentication check failed');
         const auth = await authResponse.json();
+        if (active) setAuthEnabled(auth.required);
         if (auth.required && !auth.authorized) {
           if (active) {
             setAuthRequired(true);
@@ -157,7 +159,7 @@ export function useFinanceData(notify: Notify) {
   }, [notify]);
 
   return {
-    transactions, entries, groups, groupExpenses, databaseStatus, authReady, authRequired,
+    transactions, entries, groups, groupExpenses, databaseStatus, authReady, authEnabled, authRequired,
     isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   };
 }

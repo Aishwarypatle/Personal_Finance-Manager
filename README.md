@@ -6,7 +6,7 @@ A personal finance app built with Next.js, a Node.js API layer, and MongoDB. Exp
 
 - `app/` — Next.js routes, global styles, and the page-level application composition.
 - `app/api/` — server routes for authentication, health checks, and MongoDB-backed data.
-- `components/layout/` — app sidebar (including refresh for all server-backed data) and top navigation bar.
+- `components/layout/` — app sidebar and top navigation bar (including data refresh and authenticated logout).
 - `components/screens/` — Overview, Transactions, KhataBook, Groups, Reports, and Settings screens.
 - `components/forms/` — transaction and KhataBook entry dialogs.
 - `components/shared/` — reusable headings, rows, and list UI.

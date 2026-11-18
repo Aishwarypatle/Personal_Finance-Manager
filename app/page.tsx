@@ -23,6 +23,7 @@ export default function Home() {
   const [modal, setModal] = useState<'khata' | 'transaction' | ''>('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const { isDark: darkMode, toggleTheme } = useDarkMode();
@@ -37,7 +38,7 @@ export default function Home() {
   }, []);
 
   const {
-    transactions, entries, groups, groupExpenses, databaseStatus, authReady, authRequired,
+    transactions, entries, groups, groupExpenses, databaseStatus, authReady, authEnabled, authRequired,
     isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   } = useFinanceData(notify);
 
@@ -161,6 +162,18 @@ export default function Home() {
     }
   };
 
+  const logout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const response = await fetch('/api/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Logout request failed');
+      window.location.reload();
+    } catch {
+      setIsLoggingOut(false);
+      notify('Could not log out. Please try again.', 'error');
+    }
+  };
+
   const removeTransaction = (transaction: Transaction) => {
     saveTransactions(transactions.filter((item) => item.id !== transaction.id));
     notify('Transaction deleted');
@@ -192,12 +205,7 @@ export default function Home() {
         groupCount={groups.length}
         receivable={receivable}
         payable={payable}
-        isRefreshing={isRefreshing}
         onNavigate={setPage}
-        onRefresh={() => {
-          void refreshData();
-          setMenuOpen(false);
-        }}
         onClose={() => setMenuOpen(false)}
       />
       <main className="main min-h-screen ml-[246px] max-[1100px]:ml-[220px] max-[820px]:ml-0">
@@ -205,9 +213,14 @@ export default function Home() {
           page={page}
           databaseStatus={databaseStatus}
           darkMode={darkMode}
+          showLogout={authEnabled}
+          isLoggingOut={isLoggingOut}
+          isRefreshing={isRefreshing}
           onToggleMenu={() => setMenuOpen((open) => !open)}
           onToggleTheme={toggleTheme}
           onOpenSettings={() => setPage('Settings')}
+          onLogout={() => { void logout(); }}
+          onRefresh={() => { void refreshData(); }}
         />
         <div className="content mx-auto max-w-[1300px] px-[42px] py-[37px] pb-[25px] max-[1100px]:px-[25px] max-[1100px]:py-[30px] max-[560px]:px-[15px] max-[560px]:py-[25px]">
           {page === 'Groups' ? (

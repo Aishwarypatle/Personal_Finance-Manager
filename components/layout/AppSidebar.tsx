@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeftRight, BookUser, ChartNoAxesCombined, LayoutDashboard, RefreshCw, Settings, UsersRound } from 'lucide-react';
+import { ArrowLeftRight, BookUser, ChartNoAxesCombined, LayoutDashboard, Settings, UsersRound } from 'lucide-react';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { formatCurrency } from '@/lib/format';
 import type { PageName } from '@/lib/types';
@@ -20,13 +20,11 @@ type Props = {
   groupCount: number;
   receivable: number;
   payable: number;
-  isRefreshing: boolean;
   onNavigate: (page: PageName) => void;
-  onRefresh: () => void;
   onClose: () => void;
 };
 
-export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, payable, isRefreshing, onNavigate, onRefresh, onClose }: Props) {
+export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, payable, onNavigate, onClose }: Props) {
   const navigate = (target: PageName) => {
     onNavigate(target);
     onClose();
@@ -47,10 +45,6 @@ export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, p
             {name === 'Groups' && <span className="nav-count">{groupCount}</span>}
           </button>
         ))}
-        <button type="button" className="nav-item disabled:cursor-not-allowed disabled:opacity-60" onClick={onRefresh} disabled={isRefreshing} aria-busy={isRefreshing}>
-          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-          {isRefreshing ? 'Refreshing…' : 'Refresh data'}
-        </button>
       </nav>
       <div className="side-label accounts-label">KHATA SUMMARY</div>
       <div className="khata-side">
