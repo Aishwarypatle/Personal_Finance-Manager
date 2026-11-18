@@ -79,7 +79,7 @@ export function GroupsPage({ groups, expenses, selected, setSelected, onCreateGr
       />
 
       {!group ? (
-        <section className="panel empty-state">
+        <section className="panel empty-state flex items-center justify-between gap-3">
           <p>Create a group to start sharing expenses.</p>
           <button type="button" className="primary" onClick={() => setDialog('group')}><Plus size={16} /> Create group</button>
         </section>

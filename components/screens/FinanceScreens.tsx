@@ -57,12 +57,12 @@ export function OverviewPage({
         </div>
         <div className="summary-card">
           <div className="card-top">People owe you <ArrowUpRight /></div>
-          <div className="big-number">{formatCurrency(peopleOwe)}</div>
+          <div className="big-number !text-green-700">{formatCurrency(peopleOwe)}</div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View receivables <ArrowRight size={14} /></button>
         </div>
         <div className="summary-card">
           <div className="card-top">You owe people <ArrowDownRight /></div>
-          <div className="big-number">{formatCurrency(youOwe)}</div>
+          <div className="big-number !text-red-900">{formatCurrency(youOwe)}</div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View payables <ArrowRight size={14} /></button>
         </div>
       </div>
@@ -118,8 +118,8 @@ export function KhataBookPage({
         action={<button type="button" className="primary" onClick={onAddEntry}><Plus size={17} /> Add entry</button>}
       />
       <div className="khata-summary">
-        <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong>{formatCurrency(lentTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries</span></div></div>
-        <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong>{formatCurrency(borrowedTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries</span></div></div>
+        <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong className="!text-green-700">{formatCurrency(lentTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries</span></div></div>
+        <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong className="!text-red-900">{formatCurrency(borrowedTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries</span></div></div>
         <div className="khata-net"><small>Net receivable</small><strong>{formatCurrency(lentTotal - borrowedTotal)}</strong><span>Receivable minus payable</span></div>
       </div>
       <section className="panel full-panel">

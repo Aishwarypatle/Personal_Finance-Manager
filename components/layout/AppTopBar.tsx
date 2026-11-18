@@ -14,7 +14,7 @@ type Props = {
 
 export function AppTopBar({ page, databaseStatus, darkMode, onToggleMenu, onToggleTheme, onOpenSettings }: Props) {
   return (
-    <header className="topbar">
+    <header className="topbar flex h-[65px] items-center justify-between px-[43px] max-[1100px]:px-[25px] max-[820px]:justify-start max-[820px]:gap-[15px] max-[560px]:h-[55px] max-[560px]:px-[15px]">
       <button type="button" className="mobile-menu" aria-label="Open navigation" onClick={onToggleMenu}><Menu /></button>
       <div className="crumb">Personal <span>/</span> <b>{page}</b></div>
       <div className="top-right">

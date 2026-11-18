@@ -38,7 +38,7 @@ export default function Home() {
 
   const {
     transactions, entries, groups, groupExpenses, databaseStatus, authReady, authRequired,
-    saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
+    isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   } = useFinanceData(notify);
 
   useEffect(() => {
@@ -168,7 +168,7 @@ export default function Home() {
 
   if (!authReady || authRequired) {
     return (
-      <main className="login-screen">
+      <main className="login-screen grid min-h-dvh place-items-center">
         <form className="login-card" onSubmit={submitLogin}>
           <span className="brand-icon"><BrandMark size={23} /></span>
           <h1>Ledger<span className="brand-dot">.</span></h1>
@@ -184,7 +184,7 @@ export default function Home() {
   }
 
   return (
-    <div className="app">
+    <div className="app min-h-screen bg-[#f7f8fa] font-sans text-ink">
       <AppSidebar
         page={page}
         isOpen={menuOpen}
@@ -192,10 +192,15 @@ export default function Home() {
         groupCount={groups.length}
         receivable={receivable}
         payable={payable}
+        isRefreshing={isRefreshing}
         onNavigate={setPage}
+        onRefresh={() => {
+          void refreshData();
+          setMenuOpen(false);
+        }}
         onClose={() => setMenuOpen(false)}
       />
-      <main className="main">
+      <main className="main min-h-screen ml-[246px] max-[1100px]:ml-[220px] max-[820px]:ml-0">
         <AppTopBar
           page={page}
           databaseStatus={databaseStatus}
@@ -204,7 +209,7 @@ export default function Home() {
           onToggleTheme={toggleTheme}
           onOpenSettings={() => setPage('Settings')}
         />
-        <div className="content">
+        <div className="content mx-auto max-w-[1300px] px-[42px] py-[37px] pb-[25px] max-[1100px]:px-[25px] max-[1100px]:py-[30px] max-[560px]:px-[15px] max-[560px]:py-[25px]">
           {page === 'Groups' ? (
             <GroupsPage
               groups={groups}

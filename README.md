@@ -6,7 +6,7 @@ A personal finance app built with Next.js, a Node.js API layer, and MongoDB. Exp
 
 - `app/` — Next.js routes, global styles, and the page-level application composition.
 - `app/api/` — server routes for authentication, health checks, and MongoDB-backed data.
-- `components/layout/` — app sidebar and top navigation bar.
+- `components/layout/` — app sidebar (including refresh for all server-backed data) and top navigation bar.
 - `components/screens/` — Overview, Transactions, KhataBook, Groups, Reports, and Settings screens.
 - `components/forms/` — transaction and KhataBook entry dialogs.
 - `components/shared/` — reusable headings, rows, and list UI.
@@ -32,6 +32,10 @@ Do not commit `.env.local` or share the connection URI. Production mode requires
 Use Node.js 20.9 or newer. Run `npm install` and `npm run dev`, then open `http://localhost:3000`. The top bar and Settings page show the MongoDB connection status. The development and production build scripts use the Webpack builder for consistent builds in environments where Turbopack file watching is unavailable.
 
 If the previous browser-storage version has data, the app imports it into MongoDB the first time the connection succeeds. After that, application records are read from and written to the server. Dark mode is the only preference kept in browser storage.
+
+## Styling
+
+The project uses Tailwind CSS 4 through its PostCSS plugin. Design tokens are defined in `app/globals.css` and can be used as Tailwind utilities (for example, `font-display`, `text-ink`, and `bg-ledger`). Tailwind utilities are applied to the app shell and page layout; remaining component-specific styles are in the global stylesheet.
 
 
 ## Checks

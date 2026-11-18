@@ -12,7 +12,7 @@ type CollectionSpec = {
 };
 
 async function readCollection(name: CollectionSpec['name']): Promise<unknown[]> {
-  const response = await fetch(`/api/data?collection=${name}`);
+  const response = await fetch(`/api/data?collection=${name}`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`Could not load ${name}`);
   return response.json();
 }
@@ -25,6 +25,7 @@ export function useFinanceData(notify: Notify) {
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>('connecting');
   const [authReady, setAuthReady] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(true);
 
   const saveCollection = useCallback(async (name: CollectionSpec['name'], records: unknown[]) => {
     try {
@@ -60,6 +61,30 @@ export function useFinanceData(notify: Notify) {
     void saveCollection('groupExpenses', records);
   }, [saveCollection]);
 
+  const refreshData = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const [loadedTransactions, loadedEntries, loadedGroups, loadedGroupExpenses] = await Promise.all([
+        readCollection('transactions'),
+        readCollection('khata'),
+        readCollection('groups'),
+        readCollection('groupExpenses'),
+      ]);
+      setTransactions(loadedTransactions as Transaction[]);
+      setEntries(loadedEntries as KhataEntry[]);
+      setGroups(loadedGroups as ExpenseGroup[]);
+      setGroupExpenses(loadedGroupExpenses as GroupExpense[]);
+      setDatabaseStatus('connected');
+      notify('All finance data refreshed');
+    } catch {
+      setDatabaseStatus('setup-required');
+      notify('Could not refresh server data. Check your MongoDB setup.', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, notify]);
+
   useEffect(() => {
     let active = true;
     async function bootstrap() {
@@ -71,6 +96,7 @@ export function useFinanceData(notify: Notify) {
           if (active) {
             setAuthRequired(true);
             setAuthReady(true);
+            setIsRefreshing(false);
           }
           return;
         }
@@ -113,11 +139,15 @@ export function useFinanceData(notify: Notify) {
           spec.setRecords(records);
           localStorage.removeItem(spec.legacyKey);
         }
-        if (active) setDatabaseStatus('connected');
+        if (active) {
+          setDatabaseStatus('connected');
+          setIsRefreshing(false);
+        }
       } catch {
         if (active) {
           setDatabaseStatus('setup-required');
           setAuthReady(true);
+          setIsRefreshing(false);
           notify('Could not load server data. Check your MongoDB setup.', 'error');
         }
       }
@@ -128,6 +158,6 @@ export function useFinanceData(notify: Notify) {
 
   return {
     transactions, entries, groups, groupExpenses, databaseStatus, authReady, authRequired,
-    saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
+    isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   };
 }
