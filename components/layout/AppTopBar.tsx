@@ -1,0 +1,29 @@
+'use client';
+
+import { CalendarDays, Menu, Moon, Settings, Sun } from 'lucide-react';
+import type { DatabaseStatus, PageName } from '@/lib/types';
+
+type Props = {
+  page: PageName;
+  databaseStatus: DatabaseStatus;
+  darkMode: boolean;
+  onToggleMenu: () => void;
+  onToggleTheme: () => void;
+  onOpenSettings: () => void;
+};
+
+export function AppTopBar({ page, databaseStatus, darkMode, onToggleMenu, onToggleTheme, onOpenSettings }: Props) {
+  return (
+    <header className="topbar">
+      <button type="button" className="mobile-menu" aria-label="Open navigation" onClick={onToggleMenu}><Menu /></button>
+      <div className="crumb">Personal <span>/</span> <b>{page}</b></div>
+      <div className="top-right">
+        <span className={`db-status ${databaseStatus}`}><i />{databaseStatus === 'connected' ? 'Server connected' : databaseStatus === 'connecting' ? 'Connecting…' : 'Database setup needed'}</span>
+        <span className="date-top"><CalendarDays size={15} />{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+        <button type="button" className="icon-button theme-toggle" aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} onClick={onToggleTheme}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
+        <button type="button" className="icon-button" aria-label="Open settings" onClick={onOpenSettings}><Settings size={18} /></button>
+        <div className="avatar mini" aria-label="Personal account">AP</div>
+      </div>
+    </header>
+  );
+}
