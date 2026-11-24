@@ -10,6 +10,8 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^0.468.0",
     "mongodb": "^6.12.0",
     "next": "^16.4.6",

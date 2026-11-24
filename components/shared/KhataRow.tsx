@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react';
+import { Check, Pencil, X } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { KhataEntry } from '@/lib/types';
 
@@ -6,9 +6,10 @@ type Props = {
   entry: KhataEntry;
   onPayment: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 };
 
-export function KhataRow({ entry, onPayment, onDelete }: Props) {
+export function KhataRow({ entry, onPayment, onDelete, onEdit }: Props) {
   const remaining = entry.amount - entry.paid;
   const settled = remaining <= 0;
 
@@ -47,6 +48,9 @@ export function KhataRow({ entry, onPayment, onDelete }: Props) {
             {entry.direction === 'lent' ? 'Record received' : 'Record paid'}
           </button>
         )}
+        <button type="button" className="delete-khata" onClick={onEdit} aria-label={`Edit ${entry.name}`} title="Edit entry">
+          <Pencil size={14} />
+        </button>
         <button type="button" className="delete-khata" onClick={onDelete} aria-label="Delete entry">
           <X size={15} />
         </button>

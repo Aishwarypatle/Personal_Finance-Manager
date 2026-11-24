@@ -27,6 +27,7 @@ export function useFinanceData(notify: Notify) {
   const [authEnabled, setAuthEnabled] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const saveCollection = useCallback(async (name: CollectionSpec['name'], records: unknown[]) => {
     try {
@@ -99,6 +100,7 @@ export function useFinanceData(notify: Notify) {
             setAuthRequired(true);
             setAuthReady(true);
             setIsRefreshing(false);
+            setIsInitialLoading(false);
           }
           return;
         }
@@ -144,12 +146,14 @@ export function useFinanceData(notify: Notify) {
         if (active) {
           setDatabaseStatus('connected');
           setIsRefreshing(false);
+          setIsInitialLoading(false);
         }
       } catch {
         if (active) {
           setDatabaseStatus('setup-required');
           setAuthReady(true);
           setIsRefreshing(false);
+          setIsInitialLoading(false);
           notify('Could not load server data. Check your MongoDB setup.', 'error');
         }
       }
@@ -160,6 +164,6 @@ export function useFinanceData(notify: Notify) {
 
   return {
     transactions, entries, groups, groupExpenses, databaseStatus, authReady, authEnabled, authRequired,
-    isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
+    isRefreshing, isInitialLoading, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   };
 }

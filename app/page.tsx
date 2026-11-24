@@ -5,7 +5,7 @@ import type { FormEvent } from 'react';
 import { Check, CircleAlert, X } from 'lucide-react';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { today, weekStart, formatCurrency } from '@/lib/format';
-import type { PageName, ToastMessage, Transaction, TransactionFormState } from '@/lib/types';
+import type { DateFilter, KhataEntry, PageName, ToastMessage, Transaction, TransactionFormState } from '@/lib/types';
 import { useFinanceData } from '@/hooks/useFinanceData';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { AppSidebar } from '@/components/layout/AppSidebar';
@@ -13,14 +13,17 @@ import { AppTopBar } from '@/components/layout/AppTopBar';
 import { GroupsPage } from '@/components/screens/GroupsPage';
 import { KhataBookPage, OverviewPage, ReportsPage, SettingsPage, TransactionsPage } from '@/components/screens/FinanceScreens';
 import { KhataModal, TransactionModal } from '@/components/forms/EntryModals';
+import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
 export default function Home() {
   const [page, setPage] = useState<PageName>('Overview');
   const [selectedGroup, setSelectedGroup] = useState(0);
-  const [period, setPeriod] = useState('This month');
+  const [dateFilter, setDateFilter] = useState<DateFilter>({ preset: 'month', startDate: today, endDate: today });
   const [khataFilter, setKhataFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<'khata' | 'transaction' | ''>('');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingEntry, setEditingEntry] = useState<KhataEntry | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -39,7 +42,7 @@ export default function Home() {
 
   const {
     transactions, entries, groups, groupExpenses, databaseStatus, authReady, authEnabled, authRequired,
-    isRefreshing, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
+    isRefreshing, isInitialLoading, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
   } = useFinanceData(notify);
 
   useEffect(() => {
@@ -62,14 +65,16 @@ export default function Home() {
 
   const visibleTransactions = useMemo(() => {
     return transactions
-      .filter((transaction) => period === 'Today'
-        ? transaction.date === today
-        : period === 'This week'
-          ? transaction.date >= weekStart
-          : transaction.date.slice(0, 7) === today.slice(0, 7))
+      .filter((transaction) => {
+        if (dateFilter.preset === 'today') return transaction.date === today;
+        if (dateFilter.preset === 'week') return transaction.date >= weekStart && transaction.date <= today;
+        if (dateFilter.preset === 'custom') return (!dateFilter.startDate || transaction.date >= dateFilter.startDate)
+          && (!dateFilter.endDate || transaction.date <= dateFilter.endDate);
+        return transaction.date.slice(0, 7) === today.slice(0, 7);
+      })
       .filter((transaction) => `${transaction.title} ${transaction.category}`.toLowerCase().includes(query.toLowerCase()))
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [transactions, period, query]);
+  }, [transactions, dateFilter, query]);
 
   const addTransaction = (event: FormEvent) => {
     event.preventDefault();
@@ -78,10 +83,14 @@ export default function Home() {
       notify('Enter a description and a valid amount.', 'error');
       return;
     }
-    saveTransactions([{ ...form, title: form.title.trim(), id: Date.now(), amount }, ...transactions]);
+    const nextTransaction = { ...form, title: form.title.trim(), id: editingTransaction?.id || Date.now(), amount };
+    saveTransactions(editingTransaction
+      ? transactions.map((transaction) => transaction.id === editingTransaction.id ? nextTransaction : transaction)
+      : [nextTransaction, ...transactions]);
     setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense' });
+    setEditingTransaction(null);
     setModal('');
-    notify('Transaction added');
+    notify(editingTransaction ? 'Transaction updated' : 'Transaction added');
   };
 
   const addKhataEntry = (event: FormEvent<HTMLFormElement>) => {
@@ -93,8 +102,8 @@ export default function Home() {
       notify('Enter valid amounts. Settled amount cannot exceed the total.', 'error');
       return;
     }
-    saveEntries([{
-      id: Date.now(),
+    const entry = {
+      id: editingEntry?.id || Date.now(),
       name: String(data.get('name')).trim(),
       phone: String(data.get('phone') || ''),
       direction: String(data.get('directionChoice')) as 'lent' | 'borrowed',
@@ -103,9 +112,13 @@ export default function Home() {
       date: String(data.get('date')),
       due: String(data.get('due') || ''),
       note: String(data.get('note') || ''),
-    }, ...entries]);
+    };
+    saveEntries(editingEntry
+      ? entries.map((current) => current.id === editingEntry.id ? entry : current)
+      : [entry, ...entries]);
+    setEditingEntry(null);
     setModal('');
-    notify('Khata entry saved');
+    notify(editingEntry ? 'Khata entry updated' : 'Khata entry saved');
   };
 
   const updatePayment = (entry: (typeof entries)[number]) => {
@@ -139,6 +152,8 @@ export default function Home() {
   
   const handleCloseModal = () => {
     setModal('');
+    setEditingTransaction(null);
+    setEditingEntry(null);
     setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense' });
   }
 
@@ -179,22 +194,22 @@ export default function Home() {
     notify('Transaction deleted');
   };
 
-  if (!authReady || authRequired) {
+  if (authRequired) {
     return (
       <main className="login-screen grid min-h-dvh place-items-center">
         <form className="login-card" onSubmit={submitLogin}>
           <span className="brand-icon"><BrandMark size={23} /></span>
           <h1>Ledger<span className="brand-dot">.</span></h1>
-          <p>{authReady ? 'Sign in to your personal finance ledger.' : 'Connecting securely…'}</p>
-          {authReady && <>
-            <label className="field">App password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-            <button type="submit" className="primary submit-button">Unlock my ledger</button>
-            {authError && <div className="form-error" role="alert">{authError}</div>}
-          </>}
+          <p>Sign in to your personal finance ledger.</p>
+          <label className="field">App password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+          <button type="submit" className="primary submit-button">Unlock my ledger</button>
+          {authError && <div className="form-error" role="alert">{authError}</div>}
         </form>
       </main>
     );
   }
+
+  if (!authReady || isInitialLoading) return <LoadingScreen />;
 
   return (
     <div className="app min-h-screen bg-[#f7f8fa] font-sans text-ink">
@@ -235,9 +250,17 @@ export default function Home() {
                 setSelectedGroup(group.id);
                 notify('Group created');
               }}
+              onUpdateGroup={(updatedGroup) => {
+                saveGroups(groups.map((group) => group.id === updatedGroup.id ? updatedGroup : group));
+                notify('Trip updated');
+              }}
               onAddExpense={(expense) => {
                 saveGroupExpenses([expense, ...groupExpenses]);
                 notify('Shared expense added');
+              }}
+              onUpdateExpense={(updatedExpense) => {
+                saveGroupExpenses(groupExpenses.map((expense) => expense.id === updatedExpense.id ? updatedExpense : expense));
+                notify('Shared expense updated');
               }}
               onDeleteExpense={(id) => {
                 saveGroupExpenses(groupExpenses.filter((expense) => expense.id !== id));
@@ -261,6 +284,7 @@ export default function Home() {
                   notify('Khata entry deleted');
                 }
               }}
+              onEdit={(entry) => { setEditingEntry(entry); setModal('khata'); }}
               onToast={notify}
             />
           ) : page === 'Overview' ? (
@@ -274,19 +298,29 @@ export default function Home() {
               onAddTransaction={() => setModal('transaction')}
               onNavigate={setPage}
               onRemoveTransaction={removeTransaction}
+              onEditTransaction={(transaction) => {
+                setEditingTransaction(transaction);
+                setForm({ title: transaction.title, amount: String(transaction.amount), category: transaction.category, date: transaction.date, type: transaction.type });
+                setModal('transaction');
+              }}
             />
           ) : page === 'Transactions' ? (
             <TransactionsPage
               query={query}
               onQueryChange={setQuery}
-              period={period}
-              onPeriodChange={setPeriod}
+              dateFilter={dateFilter}
+              onDateFilterChange={setDateFilter}
               transactions={visibleTransactions}
               onAddTransaction={() => setModal('transaction')}
               onRemoveTransaction={removeTransaction}
+              onEditTransaction={(transaction) => {
+                setEditingTransaction(transaction);
+                setForm({ title: transaction.title, amount: String(transaction.amount), category: transaction.category, date: transaction.date, type: transaction.type });
+                setModal('transaction');
+              }}
             />
           ) : page === 'Reports' ? (
-            <ReportsPage period={period} onPeriodChange={setPeriod} transactions={visibleTransactions} peopleOwe={receivable} onExport={exportReport} />
+            <ReportsPage dateFilter={dateFilter} onDateFilterChange={setDateFilter} transactions={visibleTransactions} peopleOwe={receivable} onExport={exportReport} />
           ) : (
             <SettingsPage databaseStatus={databaseStatus} />
           )}
@@ -297,8 +331,8 @@ export default function Home() {
         </footer>
       </main>
 
-      {modal === 'khata' && <KhataModal onSave={addKhataEntry} onClose={() => setModal('')} />}
-      {modal === 'transaction' && <TransactionModal form={form} onChange={setForm} onSave={addTransaction} onClose={handleCloseModal} />}
+      {modal === 'khata' && <KhataModal entry={editingEntry || undefined} onSave={addKhataEntry} onClose={handleCloseModal} />}
+      {modal === 'transaction' && <TransactionModal mode={editingTransaction ? 'edit' : 'create'} form={form} onChange={setForm} onSave={addTransaction} onClose={handleCloseModal} />}
       {toast && (
         <div className={`toast ${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'} aria-live={toast.type === 'error' ? 'assertive' : 'polite'}>
           {toast.type === 'error' ? <CircleAlert size={17} /> : <Check size={16} />}

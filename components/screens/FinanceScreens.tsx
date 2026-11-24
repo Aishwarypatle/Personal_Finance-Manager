@@ -14,6 +14,8 @@ import type { DatabaseStatus, KhataEntry, ToastType, Transaction } from '@/lib/t
 import { KhataRow } from '@/components/shared/KhataRow';
 import { PageHeading } from '@/components/shared/PageHeading';
 import { TransactionList } from '@/components/shared/TransactionList';
+import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
+import type { DateFilter } from '@/lib/types';
 
 type SearchProps = {
   query: string;
@@ -28,6 +30,7 @@ type OverviewProps = SearchProps & {
   onAddTransaction: () => void;
   onNavigate: (page: 'KhataBook' | 'Transactions') => void;
   onRemoveTransaction: (transaction: Transaction) => void;
+  onEditTransaction: (transaction: Transaction) => void;
 };
 
 export function OverviewPage({
@@ -40,6 +43,7 @@ export function OverviewPage({
   onAddTransaction,
   onNavigate,
   onRemoveTransaction,
+  onEditTransaction,
 }: OverviewProps) {
   return (
     <>
@@ -74,7 +78,7 @@ export function OverviewPage({
             <button type="button" className="view-all" onClick={() => onNavigate('Transactions')}>View all <ArrowRight size={14} /></button>
           </div>
         </div>
-        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} />
+        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
       </section>
     </>
   );
@@ -89,6 +93,7 @@ type KhataBookProps = SearchProps & {
   onAddEntry: () => void;
   onPayment: (entry: KhataEntry) => void;
   onDelete: (entry: KhataEntry) => void;
+  onEdit: (entry: KhataEntry) => void;
   onToast: (message: string, type?: ToastType) => void;
 };
 
@@ -103,6 +108,7 @@ export function KhataBookPage({
   onAddEntry,
   onPayment,
   onDelete,
+  onEdit,
 }: KhataBookProps) {
   const filteredEntries = entries.filter((entry) =>
     (filter === 'All' || entry.direction === filter)
@@ -133,7 +139,7 @@ export function KhataBookPage({
           </div>
         </div>
         <div className="khata-list">
-          {filteredEntries.length ? filteredEntries.map((entry) => <KhataRow key={entry.id} entry={entry} onPayment={() => onPayment(entry)} onDelete={() => onDelete(entry)} />) : <div className="empty-state"><BookUser /> No matching entries.</div>}
+          {filteredEntries.length ? filteredEntries.map((entry) => <KhataRow key={entry.id} entry={entry} onPayment={() => onPayment(entry)} onDelete={() => onDelete(entry)} onEdit={() => onEdit(entry)} />) : <div className="empty-state"><BookUser /> No matching entries.</div>}
         </div>
       </section>
       <div className="khata-tip"><HandCoins size={18} /> Add repayments as they happen to keep outstanding balances accurate.</div>
@@ -142,14 +148,15 @@ export function KhataBookPage({
 }
 
 type TransactionsProps = SearchProps & {
-  period: string;
-  onPeriodChange: (period: string) => void;
+  dateFilter: DateFilter;
+  onDateFilterChange: (filter: DateFilter) => void;
   transactions: Transaction[];
   onAddTransaction: () => void;
   onRemoveTransaction: (transaction: Transaction) => void;
+  onEditTransaction: (transaction: Transaction) => void;
 };
 
-export function TransactionsPage({ query, onQueryChange, period, onPeriodChange, transactions, onAddTransaction, onRemoveTransaction }: TransactionsProps) {
+export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilterChange, transactions, onAddTransaction, onRemoveTransaction, onEditTransaction }: TransactionsProps) {
   return (
     <>
       <PageHeading
@@ -163,24 +170,24 @@ export function TransactionsPage({ query, onQueryChange, period, onPeriodChange,
           <div><h2>All transactions</h2><p>Search and filter your activity</p></div>
           <div className="tx-tools">
             <label className="searchbox"><Search size={15} /><input placeholder="Search" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <select className="select-button" value={period} onChange={(event) => onPeriodChange(event.target.value)}><option>This month</option><option>Today</option><option>This week</option></select>
+            <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
           </div>
         </div>
-        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} />
+        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
       </section>
     </>
   );
 }
 
 type ReportsProps = {
-  period: string;
-  onPeriodChange: (period: string) => void;
+  dateFilter: DateFilter;
+  onDateFilterChange: (filter: DateFilter) => void;
   transactions: Transaction[];
   peopleOwe: number;
   onExport: () => void;
 };
 
-export function ReportsPage({ period, onPeriodChange, transactions, peopleOwe, onExport }: ReportsProps) {
+export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peopleOwe, onExport }: ReportsProps) {
   const expenses = transactions.filter((transaction) => transaction.type === 'expense');
   const income = transactions.filter((transaction) => transaction.type === 'income');
   const totalSpent = expenses.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -196,8 +203,8 @@ export function ReportsPage({ period, onPeriodChange, transactions, peopleOwe, o
       />
       <section className="panel report-panel">
         <div className="panel-head">
-          <div><h2>Spending report</h2><p>Summary for {period.toLowerCase()}</p></div>
-          <select className="select-button" value={period} onChange={(event) => onPeriodChange(event.target.value)}><option>This month</option><option>Today</option><option>This week</option></select>
+          <div><h2>Spending report</h2><p>Summary for the selected period</p></div>
+          <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
         </div>
         <div className="report-stats">
           <div><small>Total spent</small><strong>{formatCurrency(totalSpent)}</strong></div>

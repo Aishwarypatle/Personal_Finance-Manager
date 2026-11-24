@@ -1,4 +1,4 @@
-import { Ellipsis, X } from 'lucide-react';
+import { Ellipsis, Pencil, X } from 'lucide-react';
 import { categories } from '@/lib/categories';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Transaction } from '@/lib/types';
@@ -6,9 +6,10 @@ import type { Transaction } from '@/lib/types';
 type Props = {
   transactions: Transaction[];
   onRemove: (transaction: Transaction) => void;
+  onEdit: (transaction: Transaction) => void;
 };
 
-export function TransactionList({ transactions, onRemove }: Props) {
+export function TransactionList({ transactions, onRemove, onEdit }: Props) {
   if (!transactions.length) {
     return <div className="empty-state">No transactions found.</div>;
   }
@@ -32,6 +33,9 @@ export function TransactionList({ transactions, onRemove }: Props) {
               {transaction.type === 'income' ? '+' : '−'}
               {formatCurrency(transaction.amount)}
             </b>
+            <button type="button" className="delete-tx" onClick={() => onEdit(transaction)} title="Edit transaction" aria-label={`Edit ${transaction.title}`}>
+              <Pencil size={14} />
+            </button>
             <button type="button"
               className="delete-tx"
               onClick={() => onRemove(transaction)}

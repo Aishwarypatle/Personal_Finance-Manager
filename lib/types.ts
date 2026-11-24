@@ -38,3 +38,8 @@ export type TransactionFormState = {
   date: string;
   type: 'expense' | 'income';
 };
+export type DateFilter = {
+  preset: 'month' | 'today' | 'week' | 'custom';
+  startDate: string;
+  endDate: string;
+};
