@@ -8,12 +8,14 @@ import { calculateSettlements } from '@/lib/settlements';
 import type { ExpenseGroup, GroupExpense } from '@/lib/types';
 import { ModalTitle } from '@/components/shared/ModalTitle';
 import { PageHeading } from '@/components/shared/PageHeading';
+import { Skeleton } from '@/components/shared/Skeleton';
 import { downloadGroupReport } from '@/lib/groupReport';
 
 type Props = {
   groups: ExpenseGroup[];
   expenses: GroupExpense[];
   selected: number;
+  isLoading?: boolean;
   setSelected: (id: number) => void;
   onCreateGroup: (group: ExpenseGroup) => void;
   onUpdateGroup: (group: ExpenseGroup) => void;
@@ -23,7 +25,7 @@ type Props = {
   onToast: (message: string, type?: 'success' | 'error') => void;
 };
 
-export function GroupsPage({ groups, expenses, selected, setSelected, onCreateGroup, onUpdateGroup, onAddExpense, onUpdateExpense, onDeleteExpense, onToast }: Props) {
+export function GroupsPage({ groups, expenses, selected, isLoading = false, setSelected, onCreateGroup, onUpdateGroup, onAddExpense, onUpdateExpense, onDeleteExpense, onToast }: Props) {
   const [dialog, setDialog] = useState<'group' | 'expense' | ''>('');
   const [error, setError] = useState('');
   const [editingGroup, setEditingGroup] = useState<ExpenseGroup | null>(null);
@@ -96,12 +98,41 @@ export function GroupsPage({ groups, expenses, selected, setSelected, onCreateGr
         title="Groups"
         subtitle="Split shared expenses and see who owes whom."
         action={<div className="heading-actions">
-          <button type="button" className="outline-button" onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={15} /> New group</button>
-          {group && <button type="button" className="primary" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={16} /> Add expense</button>}
+          <button type="button" className="outline-button" disabled={isLoading} onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={15} /> New group</button>
+          {group && !isLoading && <button type="button" className="primary" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={16} /> Add expense</button>}
         </div>}
       />
 
-      {!group ? (
+      {isLoading ? (
+        <div className="groups-layout" aria-busy="true" aria-label="Loading groups">
+          <section className="panel group-list-panel">
+            <div className="panel-head"><div><h2>Your groups</h2><p>Shared tabs with friends</p></div><UsersRound size={18} /></div>
+            <div className="group-selector">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div className="group-select" key={index}>
+                  <span className="group-avatar skeleton" aria-hidden="true" />
+                  <span><Skeleton className="block h-3 w-24" /><Skeleton className="mt-1.5 block h-2.5 w-16" /></span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="panel group-overview">
+            <div className="group-title">
+              <div><span className="eyebrow">GROUP OVERVIEW</span><h2><Skeleton className="h-6 w-36" /></h2><p><Skeleton className="mt-1 h-3 w-44" /></p></div>
+            </div>
+            <div className="group-metrics">
+              <div><small>Total shared expenses</small><b><Skeleton className="h-4 w-20" /></b></div>
+              <div><small>Recorded expenses</small><b><Skeleton className="h-4 w-8" /></b></div>
+              <div><small>Members</small><b><Skeleton className="h-4 w-8" /></b></div>
+            </div>
+            <div className="settlement-head"><div><h3>Who pays whom</h3><p>Suggested settlements after balancing everyone’s shares</p></div></div>
+            <div className="settlement-list">
+              <div className="settlement-row"><Skeleton className="h-3.5 w-full" /></div>
+              <div className="settlement-row"><Skeleton className="h-3.5 w-4/5" /></div>
+            </div>
+          </section>
+        </div>
+      ) : !group ? (
         <section className="panel empty-state flex items-center justify-between gap-3">
           <p>Create a group to start sharing expenses.</p>
           <button type="button" className="primary" onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={16} /> Create group</button>

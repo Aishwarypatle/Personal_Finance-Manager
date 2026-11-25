@@ -209,7 +209,7 @@ export default function Home() {
     );
   }
 
-  if (!authReady || isInitialLoading) return <LoadingScreen />;
+  if (!authReady) return <LoadingScreen />;
 
   return (
     <div className="app min-h-screen bg-[#f7f8fa] font-sans text-ink">
@@ -220,6 +220,7 @@ export default function Home() {
         groupCount={groups.length}
         receivable={receivable}
         payable={payable}
+        isLoading={isInitialLoading}
         onNavigate={setPage}
         onClose={() => setMenuOpen(false)}
       />
@@ -243,6 +244,7 @@ export default function Home() {
               groups={groups}
               expenses={groupExpenses}
               selected={selectedGroup}
+              isLoading={isInitialLoading}
               setSelected={setSelectedGroup}
               onToast={notify}
               onCreateGroup={(group) => {
@@ -276,6 +278,7 @@ export default function Home() {
               onQueryChange={setQuery}
               filter={khataFilter}
               onFilterChange={setKhataFilter}
+              isLoading={isInitialLoading}
               onAddEntry={() => setModal('khata')}
               onPayment={updatePayment}
               onDelete={(entry) => {
@@ -295,6 +298,7 @@ export default function Home() {
               transactions={visibleTransactions.slice(0, 7)}
               query={query}
               onQueryChange={setQuery}
+              isLoading={isInitialLoading}
               onAddTransaction={() => setModal('transaction')}
               onNavigate={setPage}
               onRemoveTransaction={removeTransaction}
@@ -311,6 +315,7 @@ export default function Home() {
               dateFilter={dateFilter}
               onDateFilterChange={setDateFilter}
               transactions={visibleTransactions}
+              isLoading={isInitialLoading}
               onAddTransaction={() => setModal('transaction')}
               onRemoveTransaction={removeTransaction}
               onEditTransaction={(transaction) => {
@@ -320,7 +325,7 @@ export default function Home() {
               }}
             />
           ) : page === 'Reports' ? (
-            <ReportsPage dateFilter={dateFilter} onDateFilterChange={setDateFilter} transactions={visibleTransactions} peopleOwe={receivable} onExport={exportReport} />
+            <ReportsPage dateFilter={dateFilter} onDateFilterChange={setDateFilter} transactions={visibleTransactions} peopleOwe={receivable} isLoading={isInitialLoading} onExport={exportReport} />
           ) : (
             <SettingsPage databaseStatus={databaseStatus} />
           )}

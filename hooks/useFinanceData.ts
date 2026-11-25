@@ -112,9 +112,8 @@ export function useFinanceData(notify: Notify) {
           { name: 'groups', legacyKey: 'ledger_groups', setRecords: (records) => setGroups(records as ExpenseGroup[]), demoIdLimit: 1 },
           { name: 'groupExpenses', legacyKey: 'ledger_group_expenses', setRecords: (records) => setGroupExpenses(records as GroupExpense[]), demoIdLimit: 3 },
         ];
-        const loaded = await Promise.all(specs.map((spec) => readCollection(spec.name)));
-        for (const [index, spec] of specs.entries()) {
-          const serverRecords = loaded[index] as { id?: unknown }[];
+        await Promise.all(specs.map(async (spec) => {
+          const serverRecords = await readCollection(spec.name) as { id?: unknown }[];
           const removeDemoRecords = (records: { id?: unknown }[]) =>
             records.filter((record) => !(typeof record.id === 'number' && record.id >= 1 && record.id <= spec.demoIdLimit));
           let records: unknown[];
@@ -142,7 +141,7 @@ export function useFinanceData(notify: Notify) {
           if (!active) return;
           spec.setRecords(records);
           localStorage.removeItem(spec.legacyKey);
-        }
+        }));
         if (active) {
           setDatabaseStatus('connected');
           setIsRefreshing(false);

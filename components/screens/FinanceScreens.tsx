@@ -13,6 +13,7 @@ import { formatCurrency } from '@/lib/format';
 import type { DatabaseStatus, KhataEntry, ToastType, Transaction } from '@/lib/types';
 import { KhataRow } from '@/components/shared/KhataRow';
 import { PageHeading } from '@/components/shared/PageHeading';
+import { Skeleton } from '@/components/shared/Skeleton';
 import { TransactionList } from '@/components/shared/TransactionList';
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
 import type { DateFilter } from '@/lib/types';
@@ -27,6 +28,7 @@ type OverviewProps = SearchProps & {
   peopleOwe: number;
   youOwe: number;
   transactions: Transaction[];
+  isLoading?: boolean;
   onAddTransaction: () => void;
   onNavigate: (page: 'KhataBook' | 'Transactions') => void;
   onRemoveTransaction: (transaction: Transaction) => void;
@@ -40,6 +42,7 @@ export function OverviewPage({
   transactions,
   query,
   onQueryChange,
+  isLoading = false,
   onAddTransaction,
   onNavigate,
   onRemoveTransaction,
@@ -51,22 +54,28 @@ export function OverviewPage({
         eyebrow="YOUR PERSONAL FINANCE"
         title={<>Your money, in <em>good shape.</em></>}
         subtitle="Here’s what’s happening with your finances."
-        action={<button type="button" className="primary" onClick={onAddTransaction}><Plus size={17} /> Add transaction</button>}
+        action={<button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>}
       />
-      <div className="summary-grid">
+      <div className="summary-grid" aria-busy={isLoading}>
         <div className="summary-card balance-card">
           <div className="card-top">Spent this month <ArrowUpRight /></div>
-          <div className="big-number">{formatCurrency(spent)}</div>
+          <div className="big-number">
+            {isLoading ? <Skeleton inverse className="h-[34px] w-36 max-[560px]:h-[30px] max-[560px]:w-28" /> : formatCurrency(spent)}
+          </div>
           <div className="balance-foot">Personal expenses this month</div>
         </div>
         <div className="summary-card">
           <div className="card-top">People owe you <ArrowUpRight /></div>
-          <div className="big-number !text-green-700">{formatCurrency(peopleOwe)}</div>
+          <div className="big-number !text-green-700">
+            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-24" /> : formatCurrency(peopleOwe)}
+          </div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View receivables <ArrowRight size={14} /></button>
         </div>
         <div className="summary-card">
           <div className="card-top">You owe people <ArrowDownRight /></div>
-          <div className="big-number !text-red-900">{formatCurrency(youOwe)}</div>
+          <div className="big-number !text-red-900">
+            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-24" /> : formatCurrency(youOwe)}
+          </div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View payables <ArrowRight size={14} /></button>
         </div>
       </div>
@@ -78,7 +87,7 @@ export function OverviewPage({
             <button type="button" className="view-all" onClick={() => onNavigate('Transactions')}>View all <ArrowRight size={14} /></button>
           </div>
         </div>
-        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
+        <TransactionList transactions={transactions} isLoading={isLoading} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
       </section>
     </>
   );
@@ -90,6 +99,7 @@ type KhataBookProps = SearchProps & {
   borrowedTotal: number;
   filter: string;
   onFilterChange: (value: string) => void;
+  isLoading?: boolean;
   onAddEntry: () => void;
   onPayment: (entry: KhataEntry) => void;
   onDelete: (entry: KhataEntry) => void;
@@ -105,6 +115,7 @@ export function KhataBookPage({
   onQueryChange,
   filter,
   onFilterChange,
+  isLoading = false,
   onAddEntry,
   onPayment,
   onDelete,
@@ -121,12 +132,12 @@ export function KhataBookPage({
         eyebrow="PERSONAL LEDGER"
         title="KhataBook"
         subtitle="Track money you give and money you take."
-        action={<button type="button" className="primary" onClick={onAddEntry}><Plus size={17} /> Add entry</button>}
+        action={<button type="button" className="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={17} /> Add entry</button>}
       />
-      <div className="khata-summary">
-        <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong className="!text-green-700">{formatCurrency(lentTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries</span></div></div>
-        <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong className="!text-red-900">{formatCurrency(borrowedTotal)}</strong><span>{entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries</span></div></div>
-        <div className="khata-net"><small>Net receivable</small><strong>{formatCurrency(lentTotal - borrowedTotal)}</strong><span>Receivable minus payable</span></div>
+      <div className="khata-summary" aria-busy={isLoading}>
+        <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong className="!text-green-700">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(lentTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries`}</span></div></div>
+        <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong className="!text-red-900">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(borrowedTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries`}</span></div></div>
+        <div className="khata-net"><small>Net receivable</small><strong>{isLoading ? <Skeleton inverse className="h-[25px] w-28" /> : formatCurrency(lentTotal - borrowedTotal)}</strong><span>Receivable minus payable</span></div>
       </div>
       <section className="panel full-panel">
         <div className="panel-head">
@@ -138,8 +149,27 @@ export function KhataBookPage({
             </select>
           </div>
         </div>
-        <div className="khata-list">
-          {filteredEntries.length ? filteredEntries.map((entry) => <KhataRow key={entry.id} entry={entry} onPayment={() => onPayment(entry)} onDelete={() => onDelete(entry)} onEdit={() => onEdit(entry)} />) : <div className="empty-state"><BookUser /> No matching entries.</div>}
+        <div className="khata-list" aria-busy={isLoading}>
+          {isLoading ? Array.from({ length: 4 }, (_, index) => (
+            <div className="khata-row" key={index}>
+              <span className="person-avatar skeleton" aria-hidden="true" />
+              <div className="khata-person">
+                <Skeleton className="block h-3 w-28" />
+                <Skeleton className="mt-1.5 block h-2.5 w-20" />
+              </div>
+              <div className="khata-direction">
+                <Skeleton className="block h-2.5 w-20" />
+                <Skeleton className="mt-1.5 block h-2.5 w-16" />
+              </div>
+              <div className="khata-amount">
+                <Skeleton className="block h-3.5 w-20" />
+                <Skeleton className="mt-1.5 block h-2.5 w-24" />
+              </div>
+              <div className="khata-actions">
+                <Skeleton className="h-7 w-24 rounded-md" />
+              </div>
+            </div>
+          )) : filteredEntries.length ? filteredEntries.map((entry) => <KhataRow key={entry.id} entry={entry} onPayment={() => onPayment(entry)} onDelete={() => onDelete(entry)} onEdit={() => onEdit(entry)} />) : <div className="empty-state"><BookUser /> No matching entries.</div>}
         </div>
       </section>
       <div className="khata-tip"><HandCoins size={18} /> Add repayments as they happen to keep outstanding balances accurate.</div>
@@ -151,19 +181,20 @@ type TransactionsProps = SearchProps & {
   dateFilter: DateFilter;
   onDateFilterChange: (filter: DateFilter) => void;
   transactions: Transaction[];
+  isLoading?: boolean;
   onAddTransaction: () => void;
   onRemoveTransaction: (transaction: Transaction) => void;
   onEditTransaction: (transaction: Transaction) => void;
 };
 
-export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilterChange, transactions, onAddTransaction, onRemoveTransaction, onEditTransaction }: TransactionsProps) {
+export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilterChange, transactions, isLoading = false, onAddTransaction, onRemoveTransaction, onEditTransaction }: TransactionsProps) {
   return (
     <>
       <PageHeading
         eyebrow="YOUR MONEY, MOVING"
         title="Transactions"
         subtitle="Track everyday expenses and income."
-        action={<button type="button" className="primary" onClick={onAddTransaction}><Plus size={17} /> Add transaction</button>}
+        action={<button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>}
       />
       <section className="panel full-panel">
         <div className="panel-head">
@@ -173,7 +204,7 @@ export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilte
             <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
           </div>
         </div>
-        <TransactionList transactions={transactions} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
+        <TransactionList transactions={transactions} isLoading={isLoading} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
       </section>
     </>
   );
@@ -184,10 +215,11 @@ type ReportsProps = {
   onDateFilterChange: (filter: DateFilter) => void;
   transactions: Transaction[];
   peopleOwe: number;
+  isLoading?: boolean;
   onExport: () => void;
 };
 
-export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peopleOwe, onExport }: ReportsProps) {
+export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peopleOwe, isLoading = false, onExport }: ReportsProps) {
   const expenses = transactions.filter((transaction) => transaction.type === 'expense');
   const income = transactions.filter((transaction) => transaction.type === 'income');
   const totalSpent = expenses.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -199,21 +231,27 @@ export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peop
         eyebrow="YOUR FINANCIAL SNAPSHOT"
         title="Reports"
         subtitle="Review and export your spending."
-        action={<button type="button" className="primary" onClick={onExport}><Download size={16} /> Export CSV</button>}
+        action={<button type="button" className="primary" onClick={onExport} disabled={isLoading}><Download size={16} /> Export CSV</button>}
       />
-      <section className="panel report-panel">
+      <section className="panel report-panel" aria-busy={isLoading}>
         <div className="panel-head">
           <div><h2>Spending report</h2><p>Summary for the selected period</p></div>
           <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
         </div>
         <div className="report-stats">
-          <div><small>Total spent</small><strong>{formatCurrency(totalSpent)}</strong></div>
-          <div><small>Income</small><strong>{formatCurrency(totalIncome)}</strong></div>
-          <div><small>Transactions</small><strong>{transactions.length}</strong></div>
-          <div><small>People owe you</small><strong>{formatCurrency(peopleOwe)}</strong></div>
+          <div><small>Total spent</small><strong>{isLoading ? <Skeleton className="h-[22px] w-24" /> : formatCurrency(totalSpent)}</strong></div>
+          <div><small>Income</small><strong>{isLoading ? <Skeleton className="h-[22px] w-24" /> : formatCurrency(totalIncome)}</strong></div>
+          <div><small>Transactions</small><strong>{isLoading ? <Skeleton className="h-[22px] w-12" /> : transactions.length}</strong></div>
+          <div><small>People owe you</small><strong>{isLoading ? <Skeleton className="h-[22px] w-24" /> : formatCurrency(peopleOwe)}</strong></div>
         </div>
         <h3 className="report-subhead">Category breakdown</h3>
-        {categories.map(([name, color]) => {
+        {isLoading ? Array.from({ length: 4 }, (_, index) => (
+          <div className="report-cat" key={index}>
+            <Skeleton className="h-3 w-24" />
+            <span className="cat-track skeleton" aria-hidden="true" />
+            <Skeleton className="ml-auto h-3 w-14" />
+          </div>
+        )) : categories.map(([name, color]) => {
           const amount = expenses.filter((transaction) => transaction.category === name).reduce((sum, transaction) => sum + transaction.amount, 0);
           if (!amount) return null;
           return <div className="report-cat" key={name}>

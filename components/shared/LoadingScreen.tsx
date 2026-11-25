@@ -8,7 +8,7 @@ export function LoadingScreen() {
         <span className="brand-icon mx-auto"><BrandMark size={23} /></span>
         <h1>Ledger<span className="brand-dot">.</span></h1>
         <LoaderCircle className="mx-auto mt-6 animate-spin text-ledger" size={24} aria-hidden="true" />
-        <p className="mt-3">Fetching your latest finance data…</p>
+        <p className="mt-3">Checking your session…</p>
       </section>
     </main>
   );

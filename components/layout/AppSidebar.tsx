@@ -2,6 +2,7 @@
 
 import { ArrowLeftRight, BookUser, ChartNoAxesCombined, LayoutDashboard, Settings, UsersRound } from 'lucide-react';
 import { BrandMark } from '@/components/brand/BrandMark';
+import { Skeleton } from '@/components/shared/Skeleton';
 import { formatCurrency } from '@/lib/format';
 import type { PageName } from '@/lib/types';
 
@@ -20,11 +21,12 @@ type Props = {
   groupCount: number;
   receivable: number;
   payable: number;
+  isLoading?: boolean;
   onNavigate: (page: PageName) => void;
   onClose: () => void;
 };
 
-export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, payable, onNavigate, onClose }: Props) {
+export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, payable, isLoading = false, onNavigate, onClose }: Props) {
   const navigate = (target: PageName) => {
     onNavigate(target);
     onClose();
@@ -41,15 +43,15 @@ export function AppSidebar({ page, isOpen, khataCount, groupCount, receivable, p
         {navigation.map(([name, Icon]) => (
           <button type="button" key={name} className={`nav-item ${page === name ? 'active' : ''}`} onClick={() => navigate(name)}>
             <Icon size={18} />{name}
-            {name === 'KhataBook' && <span className="nav-count">{khataCount}</span>}
-            {name === 'Groups' && <span className="nav-count">{groupCount}</span>}
+            {name === 'KhataBook' && (isLoading ? <Skeleton className="nav-count h-3.5 w-5 rounded-full" /> : <span className="nav-count">{khataCount}</span>)}
+            {name === 'Groups' && (isLoading ? <Skeleton className="nav-count h-3.5 w-5 rounded-full" /> : <span className="nav-count">{groupCount}</span>)}
           </button>
         ))}
       </nav>
       <div className="side-label accounts-label">KHATA SUMMARY</div>
       <div className="khata-side">
-        <div><i className="side-mark lent-mark !text-green-700">↑</i><span>To receive<small>{formatCurrency(receivable)}</small></span></div>
-        <div><i className="side-mark borrow-mark !text-red-900">↓</i><span>To pay<small>{formatCurrency(payable)}</small></span></div>
+        <div><i className="side-mark lent-mark !text-green-700">↑</i><span>To receive<small>{isLoading ? <Skeleton className="mt-0.5 h-3 w-14" /> : formatCurrency(receivable)}</small></span></div>
+        <div><i className="side-mark borrow-mark !text-red-900">↓</i><span>To pay<small>{isLoading ? <Skeleton className="mt-0.5 h-3 w-14" /> : formatCurrency(payable)}</small></span></div>
       </div>
       <div className="sidebar-bottom">
         <div className="secure-card"><span className="secure-dot" /><div>Just you & your money<small>Your records stay on your server.</small></div></div>
