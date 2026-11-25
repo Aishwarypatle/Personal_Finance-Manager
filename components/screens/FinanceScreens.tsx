@@ -143,7 +143,7 @@ export function OverviewPage({
         eyebrow="YOUR PERSONAL FINANCE"
         title={<>Your money, in <em>good shape.</em></>}
         subtitle="Here’s what’s happening with your finances. Press N to quick-add."
-        action={<Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add transaction</Button>}
+        action={<Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add</Button>}
       />
 
       {!isLoading && dueRecurring.length > 0 && (
@@ -434,7 +434,7 @@ export function TransactionsPage({
         action={
           <div className="heading-actions">
             <Button variant="outline" size="sm" onClick={onImportCsv} disabled={isLoading}><Upload size={14} /> Import CSV</Button>
-            <Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add transaction</Button>
+            <Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add</Button>
           </div>
         }
       />

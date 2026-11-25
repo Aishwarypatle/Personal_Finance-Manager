@@ -121,7 +121,7 @@ export function GroupsPage({
         subtitle="Split shared expenses and see who owes whom."
         action={<div className="heading-actions">
           <Button variant="outline" size="sm" disabled={isLoading} onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={15} /> New group</Button>
-          {group && !isLoading && <Button variant="primary" size="sm" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={15} /> Add expense</Button>}
+          {group && !isLoading && <Button variant="primary" size="sm" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={15} /> Add</Button>}
         </div>}
       />
 
@@ -219,7 +219,7 @@ export function GroupsPage({
         </section>
 
         <section className="panel group-panel">
-          <div className="panel-head"><div><h2>Shared expenses</h2><p>Expenses and each person’s share</p></div><button type="button" className="text-link" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={14} /> Add expense</button></div>
+          <div className="panel-head"><div><h2>Shared expenses</h2><p>Expenses and each person’s share</p></div><button type="button" className="text-link" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={14} /> Add</button></div>
           {groupExpenses.length ? groupExpenses.map((expense) => <article className="shared-expense" key={expense.id}>
             <span className="shared-icon"><ReceiptText size={17} /></span>
             <span className="shared-title">
