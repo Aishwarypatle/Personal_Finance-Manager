@@ -5,12 +5,18 @@ import type { FormEvent } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { today, weekStart, formatCurrency } from '@/lib/format';
-import { buildKhataReminderText, computeMonthlySummary, getDueRecurringTransactions } from '@/lib/financeHelpers';
+import {
+  buildKhataReminderText,
+  computeMonthlySummary,
+  getDueRecurringTransactions,
+  getKhataTotals,
+} from '@/lib/financeHelpers';
 import type {
   DateFilter,
   ExpenseGroup,
   GroupExpense,
   KhataEntry,
+  KhataTransaction,
   LedgerBackup,
   PageName,
   Transaction,
@@ -24,7 +30,7 @@ import { AppTopBar } from '@/components/layout/AppTopBar';
 import { GroupsPage } from '@/components/screens/GroupsPage';
 import { KhataBookPage, OverviewPage, ReportsPage, SettingsPage, TransactionsPage } from '@/components/screens/FinanceScreens';
 import { KhataModal, TransactionModal } from '@/components/forms/EntryModals';
-import { PaymentModal } from '@/components/forms/PaymentModal';
+import { KhataDetailModal } from '@/components/forms/KhataDetailModal';
 import { BudgetModal } from '@/components/forms/BudgetModal';
 import { CsvImportModal } from '@/components/forms/CsvImportModal';
 import { ConfirmModal } from '@/components/forms/ConfirmModal';
@@ -43,10 +49,10 @@ export default function Home() {
   const [txCategory, setTxCategory] = useState('All');
   const [txType, setTxType] = useState<'all' | 'expense' | 'income'>('all');
   const [txSort, setTxSort] = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest');
-  const [modal, setModal] = useState<'khata' | 'transaction' | 'payment' | 'budgets' | 'importCsv' | ''>('');
+  const [modal, setModal] = useState<'khata' | 'transaction' | 'budgets' | 'importCsv' | ''>('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingEntry, setEditingEntry] = useState<KhataEntry | null>(null);
-  const [payingEntry, setPayingEntry] = useState<KhataEntry | null>(null);
+  const [activeKhataId, setActiveKhataId] = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -94,11 +100,15 @@ export default function Home() {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
   }, [darkMode]);
 
+  const activeKhataEntry = useMemo(
+    () => entries.find((entry) => entry.id === activeKhataId) || null,
+    [activeKhataId, entries],
+  );
+
   const handleCloseModal = useCallback(() => {
     setModal('');
     setEditingTransaction(null);
     setEditingEntry(null);
-    setPayingEntry(null);
     setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense', recurring: 'none' });
   }, []);
 
@@ -113,10 +123,14 @@ export default function Home() {
           handleCloseModal();
           return;
         }
+        if (activeKhataId !== null) {
+          setActiveKhataId(null);
+          return;
+        }
       }
       const target = event.target as HTMLElement | null;
       const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
-      if (isTyping || modal || confirmDialog || authRequired || !authReady || isInitialLoading) return;
+      if (isTyping || modal || activeKhataId !== null || confirmDialog || authRequired || !authReady || isInitialLoading) return;
 
       if (event.key.toLowerCase() === 'n' && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
@@ -132,7 +146,7 @@ export default function Home() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [authReady, authRequired, confirmDialog, handleCloseModal, isInitialLoading, modal, page]);
+  }, [activeKhataId, authReady, authRequired, confirmDialog, handleCloseModal, isInitialLoading, modal, page]);
 
   const { spent: spentThisMonth, income: incomeThisMonth } = useMemo(
     () => computeMonthlySummary(transactions),
@@ -142,12 +156,20 @@ export default function Home() {
     () => getDueRecurringTransactions(transactions),
     [transactions],
   );
-  const receivable = entries
-    .filter((entry) => entry.direction === 'lent')
-    .reduce((sum, entry) => sum + entry.amount - entry.paid, 0);
-  const payable = entries
-    .filter((entry) => entry.direction === 'borrowed')
-    .reduce((sum, entry) => sum + entry.amount - entry.paid, 0);
+  const receivable = useMemo(
+    () => entries.reduce((sum, entry) => {
+      const { net } = getKhataTotals(entry);
+      return net > 0 ? sum + net : sum;
+    }, 0),
+    [entries],
+  );
+  const payable = useMemo(
+    () => entries.reduce((sum, entry) => {
+      const { net } = getKhataTotals(entry);
+      return net < 0 ? sum + Math.abs(net) : sum;
+    }, 0),
+    [entries],
+  );
 
   const filterByDate = useCallback((list: Transaction[]) => {
     return list.filter((transaction) => {
@@ -220,59 +242,178 @@ export default function Home() {
     notify(`Logged ${generated.length} recurring ${generated.length === 1 ? 'item' : 'items'}`);
   };
 
-  const addKhataEntry = (event: FormEvent<HTMLFormElement>) => {
+  const saveKhataPerson = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const amount = Number(data.get('amount'));
-    const paid = Number(data.get('paid') || 0);
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(paid) || paid < 0 || paid > amount) {
-      notify('Enter valid amounts. Settled amount cannot exceed the total.', 'error');
+    const name = String(data.get('name') || '').trim();
+    if (!name) {
+      notify('Enter a person name.', 'error');
       return;
     }
-    const entry = {
-      id: editingEntry?.id || Date.now(),
-      name: String(data.get('name')).trim(),
-      phone: String(data.get('phone') || ''),
-      direction: String(data.get('directionChoice')) as 'lent' | 'borrowed',
-      amount,
-      paid,
-      date: String(data.get('date')),
-      due: String(data.get('due') || ''),
-      note: String(data.get('note') || ''),
+
+    if (editingEntry) {
+      const updated: KhataEntry = {
+        ...editingEntry,
+        name,
+        phone: String(data.get('phone') || '').trim(),
+        due: String(data.get('due') || ''),
+        note: String(data.get('note') || '').trim(),
+      };
+      void saveEntries(entries.map((item) => item.id === editingEntry.id ? updated : item));
+      handleCloseModal();
+      notify(`Updated ${name}'s details`);
+      return;
+    }
+
+    const openingAmount = Number(data.get('amount') || 0);
+    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+      notify('Enter a valid opening amount.', 'error');
+      return;
+    }
+    const direction = String(data.get('directionChoice') || 'gave') === 'got' ? 'got' : 'gave';
+    const phone = String(data.get('phone') || '').trim();
+    const due = String(data.get('due') || '');
+    const note = String(data.get('note') || '').trim();
+    const entryDate = String(data.get('date') || today);
+    const digits = phone.replace(/\D/g, '');
+    const existingPerson = entries.find((person) => {
+      if (person.name.toLowerCase() !== name.toLowerCase()) return false;
+      const existingDigits = person.phone.replace(/\D/g, '');
+      return !digits || !existingDigits || digits === existingDigits;
+    });
+
+    if (existingPerson) {
+      const nextLedger = openingAmount > 0
+        ? [
+            ...(existingPerson.ledger || []),
+            { id: Date.now(), type: direction, amount: openingAmount, date: entryDate, note } as KhataTransaction,
+          ]
+        : existingPerson.ledger;
+      const merged: KhataEntry = {
+        ...existingPerson,
+        phone: existingPerson.phone || phone,
+        due: existingPerson.due || due,
+        note: existingPerson.note || note,
+        ledger: nextLedger,
+      };
+      void saveEntries(entries.map((person) => person.id === existingPerson.id ? merged : person));
+      handleCloseModal();
+      notify(openingAmount > 0 ? `Added entry to ${existingPerson.name}'s khata` : `${existingPerson.name} already exists`);
+      return;
+    }
+
+    const personId = Date.now();
+    const newPerson: KhataEntry = {
+      id: personId,
+      name,
+      phone,
+      due,
+      note,
+      ledger: openingAmount > 0
+        ? [{ id: personId + 1, type: direction, amount: openingAmount, date: entryDate, note }]
+        : [],
     };
-    void saveEntries(editingEntry
-      ? entries.map((current) => current.id === editingEntry.id ? entry : current)
-      : [entry, ...entries]);
+    void saveEntries([newPerson, ...entries]);
     handleCloseModal();
-    notify(editingEntry ? 'Khata entry updated' : 'Khata entry saved');
+    notify(`Created khata card for ${name}`);
   };
 
-  const savePaymentAmount = (amount: number) => {
-    if (!payingEntry) return;
-    const nextPaid = Math.min(payingEntry.amount, Math.round((payingEntry.paid + amount) * 100) / 100);
-    void saveEntries(entries.map((item) => item.id === payingEntry.id ? { ...item, paid: nextPaid } : item));
-    handleCloseModal();
-    notify(nextPaid >= payingEntry.amount ? `${payingEntry.name} marked as settled` : 'Payment recorded');
+  const addKhataTransaction = (personId: number, transaction: KhataTransaction) => {
+    void saveEntries(entries.map((entry) => (
+      entry.id === personId
+        ? { ...entry, ledger: [...(entry.ledger || []), transaction] }
+        : entry
+    )));
+    notify(
+      transaction.type === 'gave'
+        ? `Added You Gave ${formatCurrency(transaction.amount)}`
+        : `Added You Got ${formatCurrency(transaction.amount)}`,
+    );
   };
 
-  const requestSettleKhata = (entry: KhataEntry) => {
-    const remaining = Math.max(0, Math.round((entry.amount - entry.paid) * 100) / 100);
+  const requestDeleteKhataTransaction = (person: KhataEntry, transaction: KhataTransaction) => {
     setConfirmDialog({
-      title: entry.direction === 'lent' ? 'Mark Khata settled?' : 'Mark payable settled?',
-      description: entry.direction === 'lent'
-        ? 'Confirm that you received the full remaining balance from this person.'
-        : 'Confirm that you paid the full remaining balance to this person.',
-      details: `${entry.name} · ${formatCurrency(remaining)} remaining`,
+      title: 'Delete Khata transaction?',
+      description: `Remove this entry from ${person.name}'s khata history?`,
+      details: `${transaction.type === 'gave' ? 'You Gave' : 'You Got'} ${formatCurrency(transaction.amount)} · ${transaction.date}`,
+      confirmLabel: 'Delete entry',
+      tone: 'danger',
+      onConfirm: () => {
+        const previous = entries;
+        void saveEntries(entries.map((item) => (
+          item.id === person.id
+            ? { ...item, ledger: item.ledger.filter((tx) => tx.id !== transaction.id) }
+            : item
+        )));
+        notify('Khata entry deleted', 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveEntries(previous);
+            notify('Khata entry restored');
+          },
+        });
+      },
+    });
+  };
+
+  const requestSettleKhata = (person: KhataEntry) => {
+    const { net } = getKhataTotals(person);
+    if (net === 0) return;
+    const isReceiving = net > 0;
+    const remaining = Math.abs(net);
+
+    setConfirmDialog({
+      title: isReceiving ? 'Mark Khata settled?' : 'Mark payable settled?',
+      description: isReceiving
+        ? `Confirm that you received the full ${formatCurrency(remaining)} from ${person.name}.`
+        : `Confirm that you paid the full ${formatCurrency(remaining)} to ${person.name}.`,
+      details: `${person.name} · Final settlement ${formatCurrency(remaining)}`,
       confirmLabel: 'Confirm settle',
       tone: 'primary',
       onConfirm: () => {
         const previous = entries;
-        void saveEntries(entries.map((item) => item.id === entry.id ? { ...item, paid: item.amount } : item));
-        notify(`${entry.name} marked as settled`, 'success', {
+        const settlementTx: KhataTransaction = {
+          id: Date.now(),
+          type: isReceiving ? 'got' : 'gave',
+          amount: remaining,
+          date: today,
+          note: 'Full settlement',
+          isSettlement: true,
+        };
+        void saveEntries(entries.map((item) => (
+          item.id === person.id
+            ? { ...item, ledger: [...(item.ledger || []), settlementTx] }
+            : item
+        )));
+        setActiveKhataId(null);
+        notify(`${person.name} marked as settled`, 'success', {
           actionLabel: 'Undo',
           onAction: () => {
             void saveEntries(previous);
             notify('Settlement reverted');
+          },
+        });
+      },
+    });
+  };
+
+  const requestDeleteKhataPerson = (person: KhataEntry) => {
+    const { net } = getKhataTotals(person);
+    setConfirmDialog({
+      title: 'Delete person from KhataBook?',
+      description: `This will remove ${person.name} and all ${person.ledger?.length || 0} entries in their history.`,
+      details: `${person.name} · ${net === 0 ? 'Settled' : `${net > 0 ? 'Get' : 'Give'} ${formatCurrency(Math.abs(net))}`}`,
+      confirmLabel: 'Delete person',
+      tone: 'danger',
+      onConfirm: () => {
+        const previous = entries;
+        void saveEntries(entries.filter((item) => item.id !== person.id));
+        setActiveKhataId(null);
+        notify(`Removed ${person.name} from KhataBook`, 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveEntries(previous);
+            notify(`${person.name} restored`);
           },
         });
       },
@@ -294,28 +435,6 @@ export default function Home() {
           onAction: () => {
             void saveTransactions(previous);
             notify('Transaction restored');
-          },
-        });
-      },
-    });
-  };
-
-  const requestDeleteKhataEntry = (entry: KhataEntry) => {
-    const remaining = Math.max(0, entry.amount - entry.paid);
-    setConfirmDialog({
-      title: 'Delete Khata entry?',
-      description: 'Are you sure you want to remove this person’s balance record?',
-      details: `${entry.name} · ${formatCurrency(remaining)} remaining`,
-      confirmLabel: 'Delete entry',
-      tone: 'danger',
-      onConfirm: () => {
-        const previous = entries;
-        void saveEntries(entries.filter((item) => item.id !== entry.id));
-        notify(`Removed ${entry.name}'s entry`, 'success', {
-          actionLabel: 'Undo',
-          onAction: () => {
-            void saveEntries(previous);
-            notify('Khata entry restored');
           },
         });
       },
@@ -562,14 +681,7 @@ export default function Home() {
               onSortChange={setKhataSort}
               isLoading={isInitialLoading}
               onAddEntry={() => setModal('khata')}
-              onPayment={(entry) => {
-                setPayingEntry(entry);
-                setModal('payment');
-              }}
-              onSettle={requestSettleKhata}
-              onDelete={requestDeleteKhataEntry}
-              onEdit={(entry) => { setEditingEntry(entry); setModal('khata'); }}
-              onRemind={(entry) => { void copyKhataReminder(entry); }}
+              onOpenPerson={(entry) => setActiveKhataId(entry.id)}
             />
           ) : page === 'Overview' ? (
             <OverviewPage
@@ -669,9 +781,23 @@ export default function Home() {
         </footer>
       </main>
 
-      {modal === 'khata' && <KhataModal entry={editingEntry || undefined} onSave={addKhataEntry} onClose={handleCloseModal} />}
+      {activeKhataEntry && !modal && (
+        <KhataDetailModal
+          entry={activeKhataEntry}
+          onAddTransaction={addKhataTransaction}
+          onDeleteTransaction={requestDeleteKhataTransaction}
+          onSettle={requestSettleKhata}
+          onEditPerson={(person) => {
+            setEditingEntry(person);
+            setModal('khata');
+          }}
+          onDeletePerson={requestDeleteKhataPerson}
+          onRemind={(person) => { void copyKhataReminder(person); }}
+          onClose={() => setActiveKhataId(null)}
+        />
+      )}
+      {modal === 'khata' && <KhataModal entry={editingEntry || undefined} onSave={saveKhataPerson} onClose={handleCloseModal} />}
       {modal === 'transaction' && <TransactionModal mode={editingTransaction ? 'edit' : 'create'} form={form} onChange={setForm} onSave={addTransaction} onClose={handleCloseModal} />}
-      {modal === 'payment' && payingEntry && <PaymentModal entry={payingEntry} onSave={savePaymentAmount} onClose={handleCloseModal} />}
       {modal === 'budgets' && (
         <BudgetModal
           budgets={budgets}
@@ -701,7 +827,7 @@ export default function Home() {
       )}
 
       <ToastContainer
-        position="bottom-right"
+        position="top-center"
         autoClose={3500}
         newestOnTop
         closeOnClick={false}

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { categories } from '@/lib/categories';
 import { formatCurrency } from '@/lib/format';
-import { computeBudgetProgress, getKhataDueStatus } from '@/lib/financeHelpers';
+import { computeBudgetProgress, getKhataDueStatus, getKhataTotals, sortKhataEntries } from '@/lib/financeHelpers';
 import type {
   BudgetRule,
   DatabaseStatus,
@@ -260,11 +260,7 @@ type KhataBookProps = SearchProps & {
   onSortChange: (value: 'newest' | 'due' | 'amount') => void;
   isLoading?: boolean;
   onAddEntry: () => void;
-  onPayment: (entry: KhataEntry) => void;
-  onSettle: (entry: KhataEntry) => void;
-  onDelete: (entry: KhataEntry) => void;
-  onEdit: (entry: KhataEntry) => void;
-  onRemind: (entry: KhataEntry) => void;
+  onOpenPerson: (entry: KhataEntry) => void;
 };
 
 export function KhataBookPage({
@@ -279,121 +275,112 @@ export function KhataBookPage({
   onSortChange,
   isLoading = false,
   onAddEntry,
-  onPayment,
-  onSettle,
-  onDelete,
-  onEdit,
-  onRemind,
+  onOpenPerson,
 }: KhataBookProps) {
   const overdueEntries = entries.filter((entry) => {
     const status = getKhataDueStatus(entry);
     return status === 'overdue' || status === 'due-today';
   });
 
-  const filteredEntries = entries
-    .filter((entry) => {
+  const filteredEntries = sortKhataEntries(
+    entries.filter((entry) => {
+      const { net } = getKhataTotals(entry);
       const status = getKhataDueStatus(entry);
       const matchesFilter =
         filter === 'All'
           ? true
-          : filter === 'overdue'
-            ? status === 'overdue' || status === 'due-today'
-            : entry.direction === filter;
+          : filter === 'lent'
+            ? net > 0
+            : filter === 'borrowed'
+              ? net < 0
+              : filter === 'settled'
+                ? net === 0
+                : status === 'overdue' || status === 'due-today';
       const matchesQuery = `${entry.name} ${entry.phone} ${entry.note}`.toLowerCase().includes(query.toLowerCase());
       return matchesFilter && matchesQuery;
-    })
-    .sort((left, right) => {
-      if (sortBy === 'amount') return (right.amount - right.paid) - (left.amount - left.paid);
-      if (sortBy === 'due') {
-        const leftDue = left.due || '9999-12-31';
-        const rightDue = right.due || '9999-12-31';
-        return leftDue.localeCompare(rightDue);
-      }
-      return right.date.localeCompare(left.date);
-    });
+    }),
+    sortBy,
+  );
+
+  const openLentCount = entries.filter((entry) => getKhataTotals(entry).net > 0).length;
+  const openBorrowedCount = entries.filter((entry) => getKhataTotals(entry).net < 0).length;
 
   return (
     <>
       <PageHeading
         eyebrow="PERSONAL LEDGER"
         title="KhataBook"
-        subtitle="Track money you give and money you take."
-        action={<button type="button" className="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={17} /> Add entry</button>}
+        subtitle="Click any person card to view their credit/debit history and add entries."
+        action={<button type="button" className="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={17} /> Add person</button>}
       />
 
       {!isLoading && overdueEntries.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#f5d5cc] bg-[#fff5f2] px-4 py-3 text-[11px] text-[#9b4433] dark:border-[#4b2d28] dark:bg-[#2a1d1b] dark:text-[#f1a89a]">
           <span className="flex items-center gap-2">
             <AlertTriangle size={15} className="shrink-0" />
-            <span><b>{overdueEntries.length} {overdueEntries.length === 1 ? 'entry is' : 'entries are'} due or overdue</b> — follow up to keep balances moving.</span>
+            <span><b>{overdueEntries.length} {overdueEntries.length === 1 ? 'person has' : 'people have'} due or overdue balances</b> — click a card to follow up or settle.</span>
           </span>
           <button
             type="button"
             onClick={() => onFilterChange(filter === 'overdue' ? 'All' : 'overdue')}
             className="rounded-md border border-[#e7bcb1] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#9b4433] dark:border-[#5e3933] dark:bg-[#1a2628] dark:text-[#f1a89a]"
           >
-            {filter === 'overdue' ? 'Show all entries' : 'Show due / overdue'}
+            {filter === 'overdue' ? 'Show all people' : 'Show due / overdue'}
           </button>
         </div>
       )}
 
       <div className="khata-summary" aria-busy={isLoading}>
-        <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong className="!text-green-700">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(lentTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries`}</span></div></div>
-        <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong className="!text-red-900">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(borrowedTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries`}</span></div></div>
-        <div className="khata-net"><small>Net receivable</small><strong>{isLoading ? <Skeleton inverse className="h-[25px] w-28" /> : formatCurrency(lentTotal - borrowedTotal)}</strong><span>Receivable minus payable</span></div>
+        <div className="khata-total receive"><ArrowUpRight /><div><small>You will get</small><strong className="!text-green-700">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(lentTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${openLentCount} ${openLentCount === 1 ? 'person' : 'people'}`}</span></div></div>
+        <div className="khata-total pay"><ArrowDownRight /><div><small>You will give</small><strong className="!text-red-900">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(borrowedTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${openBorrowedCount} ${openBorrowedCount === 1 ? 'person' : 'people'}`}</span></div></div>
+        <div className="khata-net"><small>Net balance</small><strong>{isLoading ? <Skeleton inverse className="h-[25px] w-28" /> : formatCurrency(lentTotal - borrowedTotal)}</strong><span>Receivable minus payable</span></div>
       </div>
+
       <section className="panel full-panel">
         <div className="panel-head">
-          <div><h2>People & entries</h2><p>Record details and keep repayments up to date</p></div>
+          <div><h2>People</h2><p>Each card shows the final settlement balance to give or get</p></div>
           <div className="tx-tools flex-wrap">
             <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search people or notes" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <select className="select-button" value={filter} onChange={(event) => onFilterChange(event.target.value)} aria-label="Filter khata entries">
-              <option value="All">All</option>
-              <option value="lent">They owe me</option>
-              <option value="borrowed">I owe them</option>
+            <select className="select-button" value={filter} onChange={(event) => onFilterChange(event.target.value)} aria-label="Filter khata people">
+              <option value="All">All people</option>
+              <option value="lent">You will get</option>
+              <option value="borrowed">You will give</option>
+              <option value="settled">Settled</option>
               <option value="overdue">Due / Overdue</option>
             </select>
-            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'due' | 'amount')} aria-label="Sort khata entries">
-              <option value="newest">Newest</option>
-              <option value="due">Earliest due</option>
+            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'due' | 'amount')} aria-label="Sort khata people">
+              <option value="newest">Recent activity</option>
               <option value="amount">Highest balance</option>
+              <option value="due">Earliest due</option>
             </select>
           </div>
         </div>
-        <div className="khata-list" aria-busy={isLoading}>
-          {isLoading ? Array.from({ length: 4 }, (_, index) => (
-            <div className="khata-row" key={index}>
-              <span className="person-avatar skeleton" aria-hidden="true" />
-              <div className="khata-person">
-                <Skeleton className="block h-3 w-28" />
-                <Skeleton className="mt-1.5 block h-2.5 w-20" />
+
+        <div className="mt-4 grid grid-cols-3 gap-3.5 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1" aria-busy={isLoading}>
+          {isLoading ? Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="rounded-xl border border-[#e9eeec] bg-[#fafcfb] p-[18px] dark:border-[#2a383a] dark:bg-[#1e2b2d]">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div>
+                  <Skeleton className="block h-3.5 w-24" />
+                  <Skeleton className="mt-1.5 block h-2.5 w-16" />
+                </div>
               </div>
-              <div className="khata-direction">
-                <Skeleton className="block h-2.5 w-20" />
-                <Skeleton className="mt-1.5 block h-2.5 w-16" />
-              </div>
-              <div className="khata-amount">
-                <Skeleton className="block h-3.5 w-20" />
-                <Skeleton className="mt-1.5 block h-2.5 w-24" />
-              </div>
-              <div className="khata-actions">
-                <Skeleton className="h-7 w-24 rounded-md" />
+              <div className="mt-4 flex items-end justify-between border-t border-[#ebf0ee] pt-3 dark:border-[#2a383a]">
+                <Skeleton className="h-2.5 w-16" />
+                <Skeleton className="h-5 w-20" />
               </div>
             </div>
           )) : filteredEntries.length ? filteredEntries.map((entry) => (
             <KhataRow
               key={entry.id}
               entry={entry}
-              onPayment={() => onPayment(entry)}
-              onSettle={() => onSettle(entry)}
-              onDelete={() => onDelete(entry)}
-              onEdit={() => onEdit(entry)}
-              onRemind={() => onRemind(entry)}
+              onOpen={() => onOpenPerson(entry)}
             />
-          )) : <div className="empty-state"><BookUser /> No matching entries.</div>}
+          )) : <div className="empty-state col-span-full"><BookUser /> No matching people. Add someone to start their khata.</div>}
         </div>
       </section>
-      <div className="khata-tip"><HandCoins size={18} /> Add repayments as they happen to keep outstanding balances accurate.</div>
+      <div className="khata-tip"><HandCoins size={18} /> Click any person card to add You Gave / You Got entries and view full history.</div>
     </>
   );
 }

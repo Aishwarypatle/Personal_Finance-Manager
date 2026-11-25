@@ -80,9 +80,182 @@ export function getDueRecurringTransactions(transactions: Transaction[], referen
   return due.sort((left, right) => right.date.localeCompare(left.date));
 }
 
+export function getKhataTotals(entry: KhataEntry) {
+  let gave = 0;
+  let got = 0;
+  if (Array.isArray(entry.ledger)) {
+    for (const item of entry.ledger) {
+      if (item.type === 'gave') gave += item.amount;
+      else got += item.amount;
+    }
+  } else {
+    const legacyAmount = Number(entry.amount) || 0;
+    const legacyPaid = Number(entry.paid) || 0;
+    if (entry.direction === 'borrowed') {
+      got = legacyAmount;
+      gave = legacyPaid;
+    } else {
+      gave = legacyAmount;
+      got = legacyPaid;
+    }
+  }
+  const net = Math.round((gave - got) * 100) / 100;
+  return { gave, got, net };
+}
+
+export function withSyncedKhataSummary(entry: KhataEntry, fallbackDate = today): KhataEntry {
+  const { gave, got, net } = getKhataTotals(entry);
+  const latestDate = (entry.ledger || []).reduce(
+    (max, item) => (item.date > max ? item.date : max),
+    entry.date || fallbackDate,
+  );
+  const direction: 'lent' | 'borrowed' = net >= 0 ? 'lent' : 'borrowed';
+  const amount = Math.round((net >= 0 ? gave : got) * 100) / 100;
+  const paid = Math.round((net >= 0 ? got : gave) * 100) / 100;
+
+  return {
+    ...entry,
+    direction,
+    amount,
+    paid,
+    date: latestDate,
+  };
+}
+
+export function normalizeKhataEntries(rawRecords: unknown[], fallbackDate = today): KhataEntry[] {
+  const people: KhataEntry[] = [];
+  const usedTxIds = new Set<number>();
+  let idCounter = Date.now();
+
+  const nextUniqueTxId = (preferred?: unknown) => {
+    const candidate = Number(preferred);
+    if (Number.isFinite(candidate) && candidate > 0 && !usedTxIds.has(candidate)) {
+      usedTxIds.add(candidate);
+      return candidate;
+    }
+    while (usedTxIds.has(idCounter)) idCounter++;
+    usedTxIds.add(idCounter);
+    return idCounter++;
+  };
+
+  for (const raw of rawRecords) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const name = String(record.name || 'Unnamed').trim() || 'Unnamed';
+    const phone = String(record.phone || '').trim();
+    const digits = phone.replace(/\D/g, '');
+    const nameKey = name.toLowerCase();
+
+    let ledger: KhataEntry['ledger'];
+    if (Array.isArray(record.ledger)) {
+      ledger = record.ledger
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && Number((item as Record<string, unknown>).amount) > 0))
+        .map((item) => {
+          const rawType = String(item.type || '').toLowerCase();
+          return {
+            id: nextUniqueTxId(item.id),
+            type: rawType === 'got' || rawType === 'credit' || rawType === 'borrowed' ? 'got' : 'gave',
+            amount: Math.round(Number(item.amount) * 100) / 100,
+            date: String(item.date || fallbackDate),
+            note: String(item.note || ''),
+            isSettlement: Boolean(item.isSettlement),
+          };
+        });
+    } else {
+      const legacyAmount = Math.round((Number(record.amount) || 0) * 100) / 100;
+      const legacyPaid = Math.round((Number(record.paid) || 0) * 100) / 100;
+      const legacyDate = String(record.date || fallbackDate);
+      const rawDir = String(record.direction || '').toLowerCase();
+      const legacyType = rawDir === 'borrowed' || rawDir === 'got' || rawDir === 'credit' ? 'got' : 'gave';
+      ledger = [];
+      if (legacyAmount > 0) {
+        ledger.push({
+          id: nextUniqueTxId(record.id),
+          type: legacyType,
+          amount: legacyAmount,
+          date: legacyDate,
+          note: String(record.note || ''),
+        });
+      }
+      if (legacyPaid > 0) {
+        ledger.push({
+          id: nextUniqueTxId(),
+          type: legacyType === 'gave' ? 'got' : 'gave',
+          amount: legacyPaid,
+          date: legacyDate,
+          note: 'Settled payment',
+          isSettlement: true,
+        });
+      }
+    }
+
+    const existing = people.find((person) => {
+      if (person.name.toLowerCase() !== nameKey) return false;
+      const existingDigits = person.phone.replace(/\D/g, '');
+      return !digits || !existingDigits || digits === existingDigits;
+    });
+
+    if (existing) {
+      existing.ledger = [...existing.ledger, ...ledger];
+      if (!existing.phone && phone) existing.phone = phone;
+      if (!existing.due && record.due) existing.due = String(record.due);
+      if (!existing.note && record.note) existing.note = String(record.note);
+    } else {
+      people.push({
+        id: Number(record.id) || nextUniqueTxId(),
+        name,
+        phone,
+        due: String(record.due || ''),
+        note: String(record.note || ''),
+        ledger,
+      });
+    }
+  }
+
+  return people.map((person) => withSyncedKhataSummary(person, fallbackDate));
+}
+
+export function getKhataLatestDate(entry: KhataEntry) {
+  if (!entry.ledger?.length) return entry.date || '';
+  return entry.ledger.reduce((max, item) => (item.date > max ? item.date : max), entry.date || '');
+}
+
+export function sortKhataEntries(entries: KhataEntry[], sortBy: 'newest' | 'due' | 'amount') {
+  return [...entries].sort((left, right) => {
+    const leftNet = getKhataTotals(left).net;
+    const rightNet = getKhataTotals(right).net;
+    const leftAbs = Math.abs(leftNet);
+    const rightAbs = Math.abs(rightNet);
+    const leftOpen = leftAbs > 0;
+    const rightOpen = rightAbs > 0;
+    if (leftOpen !== rightOpen) return leftOpen ? -1 : 1;
+
+    if (sortBy === 'amount') {
+      return rightAbs - leftAbs || getKhataLatestDate(right).localeCompare(getKhataLatestDate(left)) || right.id - left.id;
+    }
+
+    if (sortBy === 'due') {
+      const leftDue = leftOpen && left.due ? left.due.trim() : '';
+      const rightDue = rightOpen && right.due ? right.due.trim() : '';
+      if (leftDue && rightDue) {
+        return leftDue.localeCompare(rightDue) || rightAbs - leftAbs || left.id - right.id;
+      }
+      if (leftDue !== rightDue) return leftDue ? -1 : 1;
+
+      return (
+        getKhataLatestDate(left).localeCompare(getKhataLatestDate(right))
+        || rightAbs - leftAbs
+        || left.id - right.id
+      );
+    }
+
+    return getKhataLatestDate(right).localeCompare(getKhataLatestDate(left)) || right.id - left.id;
+  });
+}
+
 export function getKhataDueStatus(entry: KhataEntry, referenceDate = today) {
-  const remaining = entry.amount - entry.paid;
-  if (remaining <= 0) return 'settled' as const;
+  const { net } = getKhataTotals(entry);
+  if (Math.abs(net) <= 0) return 'settled' as const;
   if (!entry.due) return 'none' as const;
   if (entry.due < referenceDate) return 'overdue' as const;
   if (entry.due === referenceDate) return 'due-today' as const;
@@ -90,7 +263,8 @@ export function getKhataDueStatus(entry: KhataEntry, referenceDate = today) {
 }
 
 export function buildKhataReminderText(entry: KhataEntry) {
-  const remaining = Math.max(0, entry.amount - entry.paid);
+  const { net } = getKhataTotals(entry);
+  const remaining = Math.max(0, net);
   const base = `Hi ${entry.name}, friendly reminder about the pending ${formatCurrency(remaining)}`;
   const details = [entry.note ? `for ${entry.note}` : '', entry.due ? `(due ${entry.due})` : '']
     .filter(Boolean)

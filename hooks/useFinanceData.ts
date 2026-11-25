@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { normalizeKhataEntries, withSyncedKhataSummary } from '@/lib/financeHelpers';
 import type {
   BudgetRule,
   DatabaseStatus,
@@ -79,7 +80,8 @@ export function useFinanceData(notify: Notify) {
   }, [persistCollection, transactions]);
 
   const saveEntries = useCallback((records: KhataEntry[]) => {
-    return persistCollection('khata', records, entries, setEntries);
+    const synced = records.map((entry) => withSyncedKhataSummary(entry));
+    return persistCollection('khata', synced, entries, setEntries);
   }, [persistCollection, entries]);
 
   const saveGroups = useCallback((records: ExpenseGroup[]) => {
@@ -95,9 +97,10 @@ export function useFinanceData(notify: Notify) {
   }, [persistCollection, budgets]);
 
   const restoreBackup = useCallback(async (backup: LedgerBackup) => {
+    const normalizedEntries = normalizeKhataEntries(backup.entries);
     const results = await Promise.all([
       persistCollection('transactions', backup.transactions, transactions, setTransactions),
-      persistCollection('khata', backup.entries, entries, setEntries),
+      persistCollection('khata', normalizedEntries, entries, setEntries),
       persistCollection('groups', backup.groups, groups, setGroups),
       persistCollection('groupExpenses', backup.groupExpenses, groupExpenses, setGroupExpenses),
       persistCollection('budgets', backup.budgets, budgets, setBudgets),
@@ -116,8 +119,20 @@ export function useFinanceData(notify: Notify) {
         readCollection('groupExpenses'),
         readCollection('budgets'),
       ]);
+      const normalizedKhata = normalizeKhataEntries(loadedEntries);
+      const needsKhataSync = loadedEntries.some((record) => {
+        const candidate = record as Partial<KhataEntry>;
+        return !Array.isArray(candidate.ledger) || candidate.direction === undefined;
+      });
+      if (needsKhataSync) {
+        void fetch('/api/data?collection=khata', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(normalizedKhata),
+        });
+      }
       setTransactions(loadedTransactions as Transaction[]);
-      setEntries(loadedEntries as KhataEntry[]);
+      setEntries(normalizedKhata);
       setGroups(loadedGroups as ExpenseGroup[]);
       setGroupExpenses(loadedGroupExpenses as GroupExpense[]);
       setBudgets(loadedBudgets as BudgetRule[]);
@@ -152,7 +167,7 @@ export function useFinanceData(notify: Notify) {
 
         const specs: CollectionSpec[] = [
           { name: 'transactions', legacyKey: 'ledger_tx', setRecords: (records) => setTransactions(records as Transaction[]), demoIdLimit: 12 },
-          { name: 'khata', legacyKey: 'ledger_khata', setRecords: (records) => setEntries(records as KhataEntry[]), demoIdLimit: 3 },
+          { name: 'khata', legacyKey: 'ledger_khata', setRecords: (records) => setEntries(normalizeKhataEntries(records)), demoIdLimit: 3 },
           { name: 'groups', legacyKey: 'ledger_groups', setRecords: (records) => setGroups(records as ExpenseGroup[]), demoIdLimit: 1 },
           { name: 'groupExpenses', legacyKey: 'ledger_group_expenses', setRecords: (records) => setGroupExpenses(records as GroupExpense[]), demoIdLimit: 3 },
           { name: 'budgets', legacyKey: 'ledger_budgets', setRecords: (records) => setBudgets(records as BudgetRule[]), demoIdLimit: 0 },
@@ -166,7 +181,15 @@ export function useFinanceData(notify: Notify) {
           let records: unknown[];
           if (serverRecords.length) {
             records = removeDemoRecords(serverRecords);
-            if (records.length !== serverRecords.length) {
+            const needsKhataSync = spec.name === 'khata'
+              && records.some((record) => {
+                const candidate = record as Partial<KhataEntry>;
+                return !Array.isArray(candidate.ledger) || candidate.direction === undefined;
+              });
+            if (needsKhataSync) {
+              records = normalizeKhataEntries(records);
+            }
+            if (records.length !== serverRecords.length || needsKhataSync) {
               const cleanup = await fetch(`/api/data?collection=${spec.name}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -178,6 +201,9 @@ export function useFinanceData(notify: Notify) {
             let legacy: unknown = null;
             try { legacy = JSON.parse(localStorage.getItem(spec.legacyKey) || 'null'); } catch { /* Ignore malformed old browser data. */ }
             records = removeDemoRecords(Array.isArray(legacy) ? legacy : []);
+            if (spec.name === 'khata' && records.length > 0) {
+              records = normalizeKhataEntries(records);
+            }
             if (records.length > 0 || spec.name !== 'budgets') {
               const migration = await fetch(`/api/data?collection=${spec.name}`, {
                 method: 'PUT',

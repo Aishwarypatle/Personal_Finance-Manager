@@ -9,16 +9,25 @@ export type Transaction = {
   type: 'expense' | 'income';
   recurring?: RecurringFrequency;
 };
+export type KhataTransaction = {
+  id: number;
+  type: 'gave' | 'got';
+  amount: number;
+  date: string;
+  note: string;
+  isSettlement?: boolean;
+};
 export type KhataEntry = {
   id: number;
   name: string;
   phone: string;
-  direction: 'lent' | 'borrowed';
-  amount: number;
-  paid: number;
-  date: string;
   due: string;
   note: string;
+  ledger: KhataTransaction[];
+  direction?: 'lent' | 'borrowed';
+  amount?: number;
+  paid?: number;
+  date?: string;
 };
 export type GroupExpense = {
   id: number;
