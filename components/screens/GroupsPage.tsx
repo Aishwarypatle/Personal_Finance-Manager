@@ -6,10 +6,13 @@ import { ArrowRight, Check, Download, Pencil, Plus, ReceiptText, Trash2, UsersRo
 import { today, formatCurrency, formatDate } from '@/lib/format';
 import { calculateSettlements } from '@/lib/settlements';
 import type { ExpenseGroup, GroupExpense } from '@/lib/types';
-import { ModalTitle } from '@/components/shared/ModalTitle';
 import { PageHeading } from '@/components/shared/PageHeading';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { downloadGroupReport } from '@/lib/groupReport';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, Select, Textarea } from '@/components/ui/Input';
+import { Modal, ModalHeader } from '@/components/ui/Modal';
 
 type Props = {
   groups: ExpenseGroup[];
@@ -117,8 +120,8 @@ export function GroupsPage({
         title="Groups"
         subtitle="Split shared expenses and see who owes whom."
         action={<div className="heading-actions">
-          <button type="button" className="outline-button" disabled={isLoading} onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={15} /> New group</button>
-          {group && !isLoading && <button type="button" className="primary" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={16} /> Add expense</button>}
+          <Button variant="outline" size="sm" disabled={isLoading} onClick={() => { setEditingGroup(null); setDialog('group'); }}><Plus size={15} /> New group</Button>
+          {group && !isLoading && <Button variant="primary" size="sm" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={15} /> Add expense</Button>}
         </div>}
       />
 
@@ -222,11 +225,7 @@ export function GroupsPage({
             <span className="shared-title">
               <span className="flex items-center gap-1.5">
                 <b>{expense.title}</b>
-                {expense.isSettlement && (
-                  <span className="rounded-full bg-[#edf7f2] px-1.5 py-0.5 text-[8px] font-semibold text-[#278c6a] dark:bg-[#203c35] dark:text-[#73d2a9]">
-                    Settlement
-                  </span>
-                )}
+                {expense.isSettlement && <Badge tone="success">Settlement</Badge>}
               </span>
               <small>Paid by {expense.paidBy} · {formatDate(expense.date)}</small>
               <small>Shares: {Object.entries(expense.shares).map(([name, share]) => `${name} ${formatCurrency(share)}`).join(' · ')}</small>
@@ -240,29 +239,72 @@ export function GroupsPage({
         </section>
       </>}
 
-      {dialog === 'group' && <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && setDialog('')}>
-        <form className="modal" onSubmit={createGroup}>
-          <ModalTitle title={editingGroup ? 'Edit trip' : 'Create a group'} onClose={() => { setDialog(''); setEditingGroup(null); }} />
-          <label className="field">Group name<input required name="name" defaultValue={editingGroup?.name} placeholder="e.g. Goa trip" /></label>
-          <label className="field">Friends <small>Comma separated; You are included automatically</small><textarea required name="members" defaultValue={editingGroup?.members.filter((member) => member !== 'You').join(', ')} rows={3} placeholder="Rahul, Neha, Amit" /></label>
-          <button type="submit" className="primary submit-button">{editingGroup ? 'Save trip changes' : 'Create group'}</button>
-        </form>
-      </div>}
-      {dialog === 'expense' && group && <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && setDialog('')}>
-        <form className="modal" onSubmit={addExpense}>
-          <ModalTitle title={editingExpense ? 'Edit shared expense' : 'Add shared expense'} onClose={() => { setDialog(''); setEditingExpense(null); }} />
-          <label className="field">What was the expense for?<input name="title" required defaultValue={editingExpense?.title} placeholder="Expense description" /></label>
-          <div className="form-row">
-            <label className="field">Total amount<input name="amount" required min="0.01" type="number" step="0.01" defaultValue={editingExpense?.amount} placeholder="0" /></label>
-            <label className="field">Paid by<select name="paidBy" defaultValue={editingExpense?.paidBy}>{group.members.map((member) => <option key={member}>{member}</option>)}</select></label>
-          </div>
-          <label className="field">Date<input type="date" name="date" defaultValue={editingExpense?.date || today} /></label>
-          <label className="flex items-center gap-2 text-[11px] font-semibold text-[#526066] dark:text-[#b4c2be]"><input type="checkbox" checked={unequalSplit} onChange={(event) => setUnequalSplit(event.target.checked)} /> Use unequal split</label>
-          {unequalSplit ? <div className="share-fields"><p>Each person’s share</p>{group.members.map((member) => <label className="share-input" key={member}><span>{member}</span><input name={`share-${member}`} type="number" min="0" step="0.01" required defaultValue={editingExpense?.shares[member]} placeholder="0" /></label>)}</div> : <p className="rounded-lg border border-[#dcebe5] bg-[#f0f8f4] p-3 text-[10px] leading-5 text-[#527063] dark:border-[#2c4a40] dark:bg-[#1f342d] dark:text-[#cde5dc]">Split equally among all {group.members.length} members. Switch on unequal split to adjust individual shares.</p>}
-          {error && <p className="form-error">{error}</p>}
-          <button type="submit" className="primary submit-button">{editingExpense ? 'Save changes' : 'Save expense & split'}</button>
-        </form>
-      </div>}
+      {dialog === 'group' && (
+        <Modal size="md" onClose={() => { setDialog(''); setEditingGroup(null); }} ariaLabel={editingGroup ? 'Edit trip' : 'Create a group'}>
+          <ModalHeader title={editingGroup ? 'Edit trip' : 'Create a group'} onClose={() => { setDialog(''); setEditingGroup(null); }} />
+          <form className="space-y-3.5 overflow-y-auto px-5 py-4" onSubmit={createGroup}>
+            <Field label="Group name">
+              <Input required name="name" defaultValue={editingGroup?.name} placeholder="e.g. Goa trip" />
+            </Field>
+            <Field label="Friends · comma separated (You are included automatically)">
+              <Textarea required name="members" defaultValue={editingGroup?.members.filter((member) => member !== 'You').join(', ')} rows={3} placeholder="Rahul, Neha, Amit" />
+            </Field>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => { setDialog(''); setEditingGroup(null); }}>Cancel</Button>
+              <Button type="submit" variant="primary">{editingGroup ? 'Save trip changes' : 'Create group'}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {dialog === 'expense' && group && (
+        <Modal size="md" onClose={() => { setDialog(''); setEditingExpense(null); }} ariaLabel={editingExpense ? 'Edit shared expense' : 'Add shared expense'}>
+          <ModalHeader title={editingExpense ? 'Edit shared expense' : 'Add shared expense'} onClose={() => { setDialog(''); setEditingExpense(null); }} />
+          <form className="space-y-3.5 overflow-y-auto px-5 py-4" onSubmit={addExpense}>
+            <Field label="What was the expense for?">
+              <Input name="title" required defaultValue={editingExpense?.title} placeholder="Expense description" />
+            </Field>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Field label="Total amount">
+                <Input name="amount" required min="0.01" type="number" step="0.01" prefixText="₹" defaultValue={editingExpense?.amount} placeholder="0.00" />
+              </Field>
+              <Field label="Paid by">
+                <Select name="paidBy" defaultValue={editingExpense?.paidBy}>
+                  {group.members.map((member) => <option key={member}>{member}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Date">
+              <Input type="date" name="date" defaultValue={editingExpense?.date || today} />
+            </Field>
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-[#526066] dark:text-[#b4c2be]">
+              <input type="checkbox" className="accent-[#2fa77d]" checked={unequalSplit} onChange={(event) => setUnequalSplit(event.target.checked)} />
+              Use unequal split
+            </label>
+            {unequalSplit ? (
+              <div className="space-y-2 rounded-xl border border-[#edf0f2] bg-[#fafcfb] p-3 dark:border-[#2a383a] dark:bg-[#162123]">
+                <p className="text-[10.5px] font-medium text-[#657276] dark:text-[#a8b6b2]">Each person’s share</p>
+                {group.members.map((member) => (
+                  <label className="flex items-center justify-between gap-3 text-[11px] text-[#526066] dark:text-[#cbd6d3]" key={member}>
+                    <span>{member}</span>
+                    <div className="w-28">
+                      <Input compact name={`share-${member}`} type="number" min="0" step="0.01" required prefixText="₹" defaultValue={editingExpense?.shares[member]} placeholder="0" />
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-[#dcebe5] bg-[#f0f8f4] p-3 text-[10.5px] leading-5 text-[#527063] dark:border-[#2c4a40] dark:bg-[#1f342d] dark:text-[#cde5dc]">
+                Split equally among all {group.members.length} members. Switch on unequal split to adjust individual shares.
+              </p>
+            )}
+            {error && <p className="text-[11px] text-[#c95540]" role="alert">{error}</p>}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => { setDialog(''); setEditingExpense(null); }}>Cancel</Button>
+              <Button type="submit" variant="primary">{editingExpense ? 'Save changes' : 'Save expense & split'}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </>
   );
 }

@@ -18,6 +18,10 @@ import { formatCurrency, formatDate, today } from '@/lib/format';
 import { getKhataDueStatus, getKhataTotals } from '@/lib/financeHelpers';
 import { downloadKhataReport } from '@/lib/khataReport';
 import type { KhataEntry, KhataTransaction } from '@/lib/types';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 
 type Props = {
   entry: KhataEntry;
@@ -90,16 +94,7 @@ export function KhataDetailModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-30 flex items-center justify-center bg-[#121e21]/50 p-4 backdrop-blur-[2px]"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <div
-        className="flex max-h-[86vh] w-full max-w-[500px] flex-col overflow-hidden rounded-2xl border border-[#e6ecea] bg-white shadow-[0_24px_60px_rgba(16,32,36,0.18)] dark:border-[#2a383a] dark:bg-[#192527]"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${entry.name} khata`}
-      >
+    <Modal size="lg" zIndexClass="z-30" onClose={onClose} ariaLabel={`${entry.name} khata`}>
         <div className="flex items-center justify-between gap-3 border-b border-[#eff3f2] px-5 py-4 dark:border-[#273537]">
           <div className="flex min-w-0 items-center gap-3">
             <div
@@ -118,16 +113,8 @@ export function KhataDetailModal({
                 <h2 className="truncate font-display text-[15px] font-semibold tracking-tight text-[#233036] dark:text-[#e6eeec]">
                   {entry.name}
                 </h2>
-                {dueStatus === 'overdue' && (
-                  <span className="rounded-full bg-[#fff1ec] px-2 py-0.5 text-[9px] font-medium text-[#c55a45] dark:bg-[#382724] dark:text-[#f0a092]">
-                    Overdue
-                  </span>
-                )}
-                {dueStatus === 'due-today' && (
-                  <span className="rounded-full bg-[#fff8e8] px-2 py-0.5 text-[9px] font-medium text-[#a97214] dark:bg-[#3a301d] dark:text-[#f2c464]">
-                    Due today
-                  </span>
-                )}
+                {dueStatus === 'overdue' && <Badge tone="danger">Overdue</Badge>}
+                {dueStatus === 'due-today' && <Badge tone="warning">Due today</Badge>}
               </div>
               <p className="mt-0.5 truncate text-[11px] font-normal text-[#879397]">
                 {entry.phone || 'Personal ledger'}
@@ -137,40 +124,25 @@ export function KhataDetailModal({
           </div>
 
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => downloadKhataReport(entry)}
-              title="Download PDF statement"
-              className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#e6ecea] bg-white px-2.5 text-[11px] font-medium text-[#4e615c] transition-colors hover:border-[#32a881] hover:text-[#278c6a] dark:border-[#304042] dark:bg-[#1d2b2d] dark:text-[#c4d2ce]"
-            >
+            <Button variant="outline" size="sm" onClick={() => downloadKhataReport(entry)} title="Download PDF statement">
               <Download size={13} /> PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => onEditPerson(entry)}
-              title="Edit person"
-              aria-label="Edit person"
-              className="grid h-8 w-8 place-items-center rounded-lg text-[#849195] transition-colors hover:bg-[#f4f7f6] hover:text-[#233036] dark:hover:bg-[#243235] dark:hover:text-[#e6eeec]"
-            >
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onEditPerson(entry)} title="Edit person" aria-label="Edit person">
               <Pencil size={14} />
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => onDeletePerson(entry)}
               title="Delete person"
               aria-label="Delete person"
-              className="grid h-8 w-8 place-items-center rounded-lg text-[#849195] transition-colors hover:bg-[#fff2ef] hover:text-[#c95540] dark:hover:bg-[#3b2927] dark:hover:text-[#f29b8b]"
+              className="hover:!bg-[#fff2ef] hover:!text-[#c95540] dark:hover:!bg-[#3b2927] dark:hover:!text-[#f29b8b]"
             >
               <Trash2 size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="ml-0.5 grid h-8 w-8 place-items-center rounded-lg text-[#849195] transition-colors hover:bg-[#f4f7f6] hover:text-[#233036] dark:hover:bg-[#243235] dark:hover:text-[#e6eeec]"
-            >
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
               <X size={16} />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -259,46 +231,40 @@ export function KhataDetailModal({
             </div>
 
             <div className="grid grid-cols-[1fr_132px] gap-2 max-[460px]:grid-cols-1">
-              <div className="relative">
-                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[12px] text-[#8d999d]">₹</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(event) => {
-                    setAmount(event.target.value);
-                    setError('');
-                  }}
-                  className="h-9 w-full rounded-lg border border-[#e5ebe9] bg-[#fafcfb] pr-3 pl-7 text-[12px] font-medium text-[#233036] outline-none transition-colors focus:border-[#32a881] focus:bg-white dark:focus:bg-[#202e30] dark:border-[#324244] dark:bg-[#1b2729] dark:text-[#e6eeec]"
-                />
-              </div>
-              <input
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                prefixText="₹"
+                placeholder="0.00"
+                value={amount}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setError('');
+                }}
+                className="font-medium"
+              />
+              <Input
                 type="date"
                 required
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 aria-label="Entry date"
-                className="h-9 w-full rounded-lg border border-[#e5ebe9] bg-[#fafcfb] px-2.5 text-[11px] font-normal text-[#56656a] outline-none transition-colors focus:border-[#32a881] focus:bg-white dark:focus:bg-[#202e30] dark:border-[#324244] dark:bg-[#1b2729] dark:text-[#cbd6d3]"
+                className="text-[11px]"
               />
             </div>
 
             <div className="grid grid-cols-[1fr_auto] gap-2">
-              <input
+              <Input
                 type="text"
                 placeholder="Note (optional)"
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
-                className="h-9 min-w-0 rounded-lg border border-[#e5ebe9] bg-[#fafcfb] px-3 text-[12px] font-normal text-[#233036] outline-none transition-colors focus:border-[#32a881] focus:bg-white dark:focus:bg-[#202e30] dark:border-[#324244] dark:bg-[#1b2729] dark:text-[#e6eeec]"
               />
-              <button
-                type="submit"
-                className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#2fa77d] px-4 text-[11px] font-medium text-white transition-colors hover:bg-[#27916c]"
-              >
+              <Button type="submit" variant="primary">
                 <Plus size={14} /> Add
-              </button>
+              </Button>
             </div>
             {error && <p className="text-[11px] text-[#c95540]" role="alert">{error}</p>}
           </form>
@@ -376,7 +342,6 @@ export function KhataDetailModal({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

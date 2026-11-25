@@ -9,7 +9,6 @@ import {
   HandCoins,
   Plus,
   Repeat,
-  Search,
   SlidersHorizontal,
   Upload,
 } from 'lucide-react';
@@ -31,6 +30,8 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { SpendingCharts } from '@/components/shared/SpendingCharts';
 import { TransactionList } from '@/components/shared/TransactionList';
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
+import { Button } from '@/components/ui/Button';
+import { SearchInput, Select } from '@/components/ui/Input';
 
 type SearchProps = {
   query: string;
@@ -53,13 +54,9 @@ function BudgetStatusSection({ allTransactions, budgets, onManageBudgets }: Budg
           <h2 className="font-display text-[13px] font-bold text-[#253138] dark:text-[#e4ecea]">Monthly budgets</h2>
           <p className="mt-1 text-[10px] text-[#9aa3a7]">Track spending against your monthly limits</p>
         </div>
-        <button
-          type="button"
-          onClick={onManageBudgets}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[#e5ebe8] bg-white px-2.5 py-1.5 !text-[10px] view-all !font-bold text-[#4d685f] hover:border-[#32a881] hover:text-[#278c6a] dark:border-[#344446] dark:bg-[#172224] dark:text-[#c7d3d0]"
-        >
-          <SlidersHorizontal size={12} /> {progress.length ? 'Edit' : 'Set'}
-        </button>
+        <Button variant="outline" size="sm" onClick={onManageBudgets}>
+          <SlidersHorizontal size={12} /> {progress.length ? 'Edit budgets' : 'Set budgets'}
+        </Button>
       </div>
 
       {progress.length === 0 ? (
@@ -146,7 +143,7 @@ export function OverviewPage({
         eyebrow="YOUR PERSONAL FINANCE"
         title={<>Your money, in <em>good shape.</em></>}
         subtitle="Here’s what’s happening with your finances. Press N to quick-add."
-        action={<button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>}
+        action={<Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add transaction</Button>}
       />
 
       {!isLoading && dueRecurring.length > 0 && (
@@ -240,8 +237,8 @@ export function OverviewPage({
         <div className="panel-head transaction-head">
           <div><h2>Recent transactions</h2><p>Your latest money moves</p></div>
           <div className="tx-tools">
-            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search transactions (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <button type="button" className="view-all !font-bold" onClick={() => onNavigate('Transactions')}>View all <ArrowRight size={14} /></button>
+            <SearchInput data-search-input="true" placeholder="Search transactions (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} />
+            <Button variant="ghost" size="sm" onClick={() => onNavigate('Transactions')} className="!text-[#2e9b74] dark:!text-[#6ed0a5]">View all <ArrowRight size={14} /></Button>
           </div>
         </div>
         <TransactionList transactions={transactions} isLoading={isLoading} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
@@ -311,7 +308,7 @@ export function KhataBookPage({
         eyebrow="PERSONAL LEDGER"
         title="KhataBook"
         subtitle="Click any person card to view their credit/debit history and add entries."
-        action={<button type="button" className="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={17} /> Add person</button>}
+        action={<Button variant="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={16} /> Add person</Button>}
       />
 
       {!isLoading && overdueEntries.length > 0 && (
@@ -340,19 +337,23 @@ export function KhataBookPage({
         <div className="panel-head">
           <div><h2>People</h2><p>Each card shows the final settlement balance to give or get</p></div>
           <div className="tx-tools flex-wrap">
-            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search people or notes" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <select className="select-button" value={filter} onChange={(event) => onFilterChange(event.target.value)} aria-label="Filter khata people">
-              <option value="All">All people</option>
-              <option value="lent">You will get</option>
-              <option value="borrowed">You will give</option>
-              <option value="settled">Settled</option>
-              <option value="overdue">Due / Overdue</option>
-            </select>
-            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'due' | 'amount')} aria-label="Sort khata people">
-              <option value="newest">Recent activity</option>
-              <option value="amount">Highest balance</option>
-              <option value="due">Earliest due</option>
-            </select>
+            <SearchInput data-search-input="true" placeholder="Search people or notes" value={query} onChange={(event) => onQueryChange(event.target.value)} />
+            <div className="w-auto min-w-[125px]">
+              <Select compact value={filter} onChange={(event) => onFilterChange(event.target.value)} aria-label="Filter khata people">
+                <option value="All">All people</option>
+                <option value="lent">You will get</option>
+                <option value="borrowed">You will give</option>
+                <option value="settled">Settled</option>
+                <option value="overdue">Due / Overdue</option>
+              </Select>
+            </div>
+            <div className="w-auto min-w-[138px]">
+              <Select compact value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'due' | 'amount')} aria-label="Sort khata people">
+                <option value="newest">Recent activity</option>
+                <option value="amount">Highest balance</option>
+                <option value="due">Earliest due</option>
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -432,8 +433,8 @@ export function TransactionsPage({
         subtitle="Track everyday expenses and income."
         action={
           <div className="heading-actions">
-            <button type="button" className="outline-button" onClick={onImportCsv} disabled={isLoading}><Upload size={14} /> Import CSV</button>
-            <button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>
+            <Button variant="outline" size="sm" onClick={onImportCsv} disabled={isLoading}><Upload size={14} /> Import CSV</Button>
+            <Button variant="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={16} /> Add transaction</Button>
           </div>
         }
       />
@@ -449,34 +450,38 @@ export function TransactionsPage({
         <div className="panel-head flex-wrap gap-3">
           <div><h2>All transactions</h2><p>Search, group, and filter your activity</p></div>
           <div className="tx-tools flex-wrap">
-            <div className="inline-flex rounded-md border border-[#e9edef] bg-[#f7f9f8] p-0.5 dark:border-[#344446] dark:bg-[#172224]">
+            <div className="inline-flex h-8 items-center rounded-[9px] border border-[#e3e9e7] bg-[#f4f7f6] p-0.5 dark:border-[#324244] dark:bg-[#1a2628]">
               {(['all', 'expense', 'income'] as const).map((option) => (
                 <button
                   key={option}
                   type="button"
                   onClick={() => onTypeFilterChange(option)}
-                  className={`rounded px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors ${
+                  className={`h-full rounded-[7px] px-2.5 text-[10.5px] font-medium capitalize transition-all ${
                     typeFilter === option
                       ? 'bg-white text-[#278c6a] shadow-xs dark:bg-[#243638] dark:text-[#73d2a9]'
-                      : 'text-[#7f8c91] dark:text-[#9baaa7]'
+                      : 'text-[#7f8c91] hover:text-[#354448] dark:text-[#9baaa7]'
                   }`}
                 >
                   {option}
                 </button>
               ))}
             </div>
-            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <select className="select-button" value={categoryFilter} onChange={(event) => onCategoryFilterChange(event.target.value)} aria-label="Filter by category">
-              <option value="All">All categories</option>
-              {categories.map(([name]) => <option key={name} value={name}>{name}</option>)}
-            </select>
+            <SearchInput data-search-input="true" placeholder="Search (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} />
+            <div className="w-auto min-w-[132px]">
+              <Select compact value={categoryFilter} onChange={(event) => onCategoryFilterChange(event.target.value)} aria-label="Filter by category">
+                <option value="All">All categories</option>
+                {categories.map(([name]) => <option key={name} value={name}>{name}</option>)}
+              </Select>
+            </div>
             <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
-            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'oldest' | 'highest' | 'lowest')} aria-label="Sort transactions">
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="highest">Highest amount</option>
-              <option value="lowest">Lowest amount</option>
-            </select>
+            <div className="w-auto min-w-[128px]">
+              <Select compact value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'oldest' | 'highest' | 'lowest')} aria-label="Sort transactions">
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="highest">Highest amount</option>
+                <option value="lowest">Lowest amount</option>
+              </Select>
+            </div>
           </div>
         </div>
         <TransactionList transactions={transactions} isLoading={isLoading} groupByDate onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
@@ -520,8 +525,8 @@ export function ReportsPage({
       <PageHeading
         eyebrow="YOUR FINANCIAL SNAPSHOT"
         title="Reports"
-        subtitle="Review charts, budgets, and export your spending."
-        action={<button type="button" className="primary" onClick={onExport} disabled={isLoading}><Download size={16} /> Export CSV</button>}
+        subtitle="Review charts, budgets, and export a styled PDF report."
+        action={<Button variant="primary" onClick={onExport} disabled={isLoading}><Download size={15} /> Export PDF</Button>}
       />
       <section className="panel report-panel" aria-busy={isLoading}>
         <div className="panel-head">
@@ -631,17 +636,17 @@ export function SettingsPage({
         <div className="setting-row"><div><b>Currency</b><small>Used for balances and reports</small></div><span>₹ Indian Rupee (INR)</span></div>
         <div className="setting-row">
           <div><b>Monthly budgets</b><small>Configure overall or category spending limits</small></div>
-          <button type="button" className="outline-button" disabled={isLoading} onClick={onManageBudgets}><SlidersHorizontal size={13} /> Configure</button>
+          <Button variant="outline" size="sm" disabled={isLoading} onClick={onManageBudgets}><SlidersHorizontal size={13} /> Configure</Button>
         </div>
         <div className="setting-row">
           <div><b>CSV statement import</b><small>Import bank or UPI exports with automatic category detection</small></div>
-          <button type="button" className="outline-button" disabled={isLoading} onClick={onImportCsv}><Upload size={13} /> Import CSV</button>
+          <Button variant="outline" size="sm" disabled={isLoading} onClick={onImportCsv}><Upload size={13} /> Import CSV</Button>
         </div>
         <div className="setting-row">
           <div><b>Full JSON backup</b><small>Export or restore all transactions, KhataBook, groups, and budgets</small></div>
           <div className="flex items-center gap-2">
-            <button type="button" className="outline-button" disabled={isLoading} onClick={onExportBackup}><Download size={13} /> Export JSON</button>
-            <label className="outline-button cursor-pointer">
+            <Button variant="outline" size="sm" disabled={isLoading} onClick={onExportBackup}><Download size={13} /> Export JSON</Button>
+            <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e2e8e6] bg-white px-3 text-[11px] font-medium text-[#4b5c60] transition-colors hover:border-[#32a881]/70 hover:text-[#258562] dark:border-[#324244] dark:bg-[#192527] dark:text-[#c7d3d0]">
               <Upload size={13} /> Restore JSON
               <input type="file" accept="application/json,.json" className="hidden" disabled={isLoading} onChange={(event) => { void handleBackupFile(event); }} />
             </label>

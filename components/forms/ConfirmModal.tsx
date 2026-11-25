@@ -1,4 +1,6 @@
-import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Modal, ModalHeader } from '@/components/ui/Modal';
 
 export type ConfirmDialogState = {
   title: string;
@@ -25,30 +27,9 @@ export function ConfirmModal({
   const isDanger = tone === 'danger';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#121e21]/55 p-4 backdrop-blur-[2px]"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <div
-        className="w-full max-w-[400px] rounded-2xl border border-[#e6ecea] bg-white p-5 shadow-[0_24px_60px_rgba(16,32,36,0.22)] dark:border-[#2a383a] dark:bg-[#192527]"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-modal-title"
-      >
-        <div className="mb-3.5 flex items-center justify-between gap-2">
-          <h2 id="confirm-modal-title" className="font-display text-[15px] font-semibold tracking-tight text-[#233036] dark:text-[#e6eeec]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-lg text-[#849195] transition-colors hover:bg-[#f4f7f6] hover:text-[#233036] dark:hover:bg-[#243235] dark:hover:text-[#e6eeec]"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
+    <Modal size="sm" zIndexClass="z-50" onClose={onClose} ariaLabel={title}>
+      <ModalHeader title={title} onClose={onClose} />
+      <div className="px-5 py-4">
         <div className="flex items-start gap-3">
           <span
             className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
@@ -70,29 +51,18 @@ export function ConfirmModal({
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 rounded-lg border border-[#e5ebe8] bg-white px-3.5 text-[11px] font-medium text-[#5b696d] transition-colors hover:bg-[#f5f8f6] dark:border-[#344446] dark:bg-[#1b2729] dark:text-[#c7d3d0] dark:hover:bg-[#202e30]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            variant={isDanger ? 'danger' : 'primary'}
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className={`h-9 rounded-lg px-4 text-[11px] font-medium text-white transition-colors ${
-              isDanger
-                ? 'bg-[#c95540] hover:bg-[#b54835]'
-                : 'bg-[#2fa77d] hover:bg-[#27916c]'
-            }`}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

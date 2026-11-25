@@ -11,6 +11,7 @@ import {
   getDueRecurringTransactions,
   getKhataTotals,
 } from '@/lib/financeHelpers';
+import { downloadFinanceReport } from '@/lib/financeReport';
 import type {
   DateFilter,
   ExpenseGroup,
@@ -36,6 +37,8 @@ import { CsvImportModal } from '@/components/forms/CsvImportModal';
 import { ConfirmModal } from '@/components/forms/ConfirmModal';
 import type { ConfirmDialogState } from '@/components/forms/ConfirmModal';
 import { LoadingScreen } from '@/components/shared/LoadingScreen';
+import { Button } from '@/components/ui/Button';
+import { Field, Input } from '@/components/ui/Input';
 
 export default function Home() {
   const [page, setPage] = useState<PageName>('Overview');
@@ -523,18 +526,14 @@ export default function Home() {
   };
 
   const exportReport = () => {
-    const rows = [
-      ['Date', 'Description', 'Category', 'Type', 'Amount'],
-      ...reportTransactions.map((transaction) => [transaction.date, transaction.title, transaction.category, transaction.type, String(transaction.amount)]),
-    ];
-    const csv = rows.map((row) => row.map((field) => `"${String(field).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'finance-report.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-    notify('Report downloaded');
+    downloadFinanceReport({
+      transactions: reportTransactions,
+      allTransactions: transactions,
+      budgets,
+      peopleOwe: receivable,
+      dateFilter,
+    });
+    notify('PDF report downloaded');
   };
 
   const exportBackup = () => {
@@ -597,12 +596,16 @@ export default function Home() {
   if (authRequired) {
     return (
       <main className="login-screen grid min-h-dvh place-items-center">
-        <form className="login-card" onSubmit={submitLogin}>
+        <form className="login-card space-y-4" onSubmit={submitLogin}>
           <span className="brand-icon"><BrandMark size={23} /></span>
-          <h1>Ledger<span className="brand-dot">.</span></h1>
-          <p>Sign in to your personal finance ledger.</p>
-          <label className="field">App password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-          <button type="submit" className="primary submit-button">Unlock my ledger</button>
+          <div>
+            <h1>Ledger<span className="brand-dot">.</span></h1>
+            <p className="!mb-0">Sign in to your personal finance ledger.</p>
+          </div>
+          <Field label="App password">
+            <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required placeholder="Enter password" />
+          </Field>
+          <Button type="submit" variant="primary" className="w-full">Unlock my ledger</Button>
           {authError && <div className="form-error" role="alert">{authError}</div>}
         </form>
       </main>
