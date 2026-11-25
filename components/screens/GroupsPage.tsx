@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowRight, Check, Download, Pencil, Plus, ReceiptText, UsersRound, X } from 'lucide-react';
+import { ArrowRight, Check, Download, Pencil, Plus, ReceiptText, Trash2, UsersRound, X } from 'lucide-react';
 import { today, formatCurrency, formatDate } from '@/lib/format';
 import { calculateSettlements } from '@/lib/settlements';
 import type { ExpenseGroup, GroupExpense } from '@/lib/types';
@@ -19,21 +19,40 @@ type Props = {
   setSelected: (id: number) => void;
   onCreateGroup: (group: ExpenseGroup) => void;
   onUpdateGroup: (group: ExpenseGroup) => void;
+  onDeleteGroup: (group: ExpenseGroup) => void;
   onAddExpense: (expense: GroupExpense) => void;
   onUpdateExpense: (expense: GroupExpense) => void;
-  onDeleteExpense: (id: number) => void;
+  onDeleteExpense: (expense: GroupExpense) => void;
+  onSettleUp: (groupId: number, from: string, to: string, amount: number) => void;
   onToast: (message: string, type?: 'success' | 'error') => void;
 };
 
-export function GroupsPage({ groups, expenses, selected, isLoading = false, setSelected, onCreateGroup, onUpdateGroup, onAddExpense, onUpdateExpense, onDeleteExpense, onToast }: Props) {
+export function GroupsPage({
+  groups,
+  expenses,
+  selected,
+  isLoading = false,
+  setSelected,
+  onCreateGroup,
+  onUpdateGroup,
+  onDeleteGroup,
+  onAddExpense,
+  onUpdateExpense,
+  onDeleteExpense,
+  onSettleUp,
+  onToast,
+}: Props) {
   const [dialog, setDialog] = useState<'group' | 'expense' | ''>('');
   const [error, setError] = useState('');
   const [editingGroup, setEditingGroup] = useState<ExpenseGroup | null>(null);
   const [editingExpense, setEditingExpense] = useState<GroupExpense | null>(null);
   const [unequalSplit, setUnequalSplit] = useState(false);
+
   const group = groups.find((item) => item.id === selected) || groups[0];
   const groupExpenses = group ? expenses.filter((expense) => expense.groupId === group.id) : [];
-  const total = groupExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const total = groupExpenses
+    .filter((expense) => !expense.isSettlement)
+    .reduce((sum, expense) => sum + expense.amount, 0);
   const { balances, settlements } = group ? calculateSettlements(group, groupExpenses) : { balances: [], settlements: [] };
 
   const createGroup = (event: FormEvent<HTMLFormElement>) => {
@@ -149,16 +168,41 @@ export function GroupsPage({ groups, expenses, selected, isLoading = false, setS
             </div>
           </section>
           <section className="panel group-overview">
-            <div className="group-title"><div><span className="eyebrow">GROUP OVERVIEW</span><h2>{group.name}</h2><p>{group.members.join(' · ')}</p></div><div className="heading-actions"><button type="button" className="text-link" onClick={() => { setEditingGroup(group); setDialog('group'); }}><Pencil size={14} /> Edit trip</button><button type="button" className="text-link" onClick={() => downloadGroupReport(group, groupExpenses, balances, settlements)}><Download size={14} /> PDF report</button></div></div>
+            <div className="group-title">
+              <div><span className="eyebrow">GROUP OVERVIEW</span><h2>{group.name}</h2><p>{group.members.join(' · ')}</p></div>
+              <div className="heading-actions flex-wrap">
+                <button type="button" className="text-link" onClick={() => { setEditingGroup(group); setDialog('group'); }}><Pencil size={14} /> Edit trip</button>
+                <button type="button" className="text-link" onClick={() => downloadGroupReport(group, groupExpenses, balances, settlements)}><Download size={14} /> PDF report</button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#c95540] hover:underline"
+                  onClick={() => onDeleteGroup(group)}
+                >
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            </div>
             <div className="group-metrics">
               <div><small>Total shared expenses</small><b>{formatCurrency(total)}</b></div>
-              <div><small>Recorded expenses</small><b>{groupExpenses.length}</b></div>
+              <div><small>Recorded entries</small><b>{groupExpenses.length}</b></div>
               <div><small>Members</small><b>{group.members.length}</b></div>
             </div>
             <div className="settlement-head"><div><h3>Who pays whom</h3><p>Suggested settlements after balancing everyone’s shares</p></div></div>
-            {settlements.length ? <div className="settlement-list">{settlements.map((settlement, index) => <div className="settlement-row" key={`${settlement.from}-${settlement.to}-${index}`}>
-              <span className="settle-person">{settlement.from}</span><span className="settle-arrow">pays <ArrowRight size={14} /></span><span className="settle-person">{settlement.to}</span><b>{formatCurrency(settlement.amount)}</b>
-            </div>)}</div> : <div className="settlement-empty"><Check size={16} /> Everyone is settled up for this group.</div>}
+            {settlements.length ? <div className="settlement-list">{settlements.map((settlement, index) => (
+              <div className="settlement-row flex-wrap" key={`${settlement.from}-${settlement.to}-${index}`}>
+                <span className="settle-person">{settlement.from}</span>
+                <span className="settle-arrow">pays <ArrowRight size={14} /></span>
+                <span className="settle-person">{settlement.to}</span>
+                <b>{formatCurrency(settlement.amount)}</b>
+                <button
+                  type="button"
+                  onClick={() => onSettleUp(group.id, settlement.from, settlement.to, settlement.amount)}
+                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-[#cde6da] bg-[#edf7f2] px-2 py-1 text-[9px] font-semibold text-[#258562] hover:bg-[#dff1e8] dark:border-[#2c4f41] dark:bg-[#203c35] dark:text-[#73d2a9]"
+                >
+                  <Check size={11} /> Mark settled
+                </button>
+              </div>
+            ))}</div> : <div className="settlement-empty"><Check size={16} /> Everyone is settled up for this group.</div>}
           </section>
         </div>
 
@@ -175,10 +219,23 @@ export function GroupsPage({ groups, expenses, selected, isLoading = false, setS
           <div className="panel-head"><div><h2>Shared expenses</h2><p>Expenses and each person’s share</p></div><button type="button" className="text-link" onClick={() => { setError(''); setEditingExpense(null); setUnequalSplit(false); setDialog('expense'); }}><Plus size={14} /> Add expense</button></div>
           {groupExpenses.length ? groupExpenses.map((expense) => <article className="shared-expense" key={expense.id}>
             <span className="shared-icon"><ReceiptText size={17} /></span>
-            <span className="shared-title"><b>{expense.title}</b><small>Paid by {expense.paidBy} · {formatDate(expense.date)}</small><small>Shares: {Object.entries(expense.shares).map(([name, share]) => `${name} ${formatCurrency(share)}`).join(' · ')}</small></span>
+            <span className="shared-title">
+              <span className="flex items-center gap-1.5">
+                <b>{expense.title}</b>
+                {expense.isSettlement && (
+                  <span className="rounded-full bg-[#edf7f2] px-1.5 py-0.5 text-[8px] font-semibold text-[#278c6a] dark:bg-[#203c35] dark:text-[#73d2a9]">
+                    Settlement
+                  </span>
+                )}
+              </span>
+              <small>Paid by {expense.paidBy} · {formatDate(expense.date)}</small>
+              <small>Shares: {Object.entries(expense.shares).map(([name, share]) => `${name} ${formatCurrency(share)}`).join(' · ')}</small>
+            </span>
             <strong>{formatCurrency(expense.amount)}</strong>
-            <button type="button" className="delete-khata" onClick={() => { setEditingExpense(expense); setUnequalSplit(true); setError(''); setDialog('expense'); }} title="Edit expense" aria-label={`Edit ${expense.title}`}><Pencil size={15} /></button>
-            <button type="button" className="delete-khata" onClick={() => onDeleteExpense(expense.id)} title="Delete expense" aria-label={`Delete ${expense.title}`}><X size={15} /></button>
+            {!expense.isSettlement && (
+              <button type="button" className="delete-khata" onClick={() => { setEditingExpense(expense); setUnequalSplit(true); setError(''); setDialog('expense'); }} title="Edit expense" aria-label={`Edit ${expense.title}`}><Pencil size={15} /></button>
+            )}
+            <button type="button" className="delete-khata" onClick={() => onDeleteExpense(expense)} title="Delete expense" aria-label={`Delete ${expense.title}`}><X size={15} /></button>
           </article>) : <div className="empty-state">No shared expenses yet.</div>}
         </section>
       </>}
@@ -200,8 +257,8 @@ export function GroupsPage({ groups, expenses, selected, isLoading = false, setS
             <label className="field">Paid by<select name="paidBy" defaultValue={editingExpense?.paidBy}>{group.members.map((member) => <option key={member}>{member}</option>)}</select></label>
           </div>
           <label className="field">Date<input type="date" name="date" defaultValue={editingExpense?.date || today} /></label>
-          <label className="flex items-center gap-2 text-[11px] font-semibold text-[#526066]"><input type="checkbox" checked={unequalSplit} onChange={(event) => setUnequalSplit(event.target.checked)} /> Use unequal split</label>
-          {unequalSplit ? <div className="share-fields"><p>Each person’s share</p>{group.members.map((member) => <label className="share-input" key={member}><span>{member}</span><input name={`share-${member}`} type="number" min="0" step="0.01" required defaultValue={editingExpense?.shares[member]} placeholder="0" /></label>)}</div> : <p className="rounded-lg border border-[#dcebe5] bg-[#f0f8f4] p-3 text-[10px] leading-5 text-[#527063]">Split equally among all {group.members.length} members. Switch on unequal split to adjust individual shares.</p>}
+          <label className="flex items-center gap-2 text-[11px] font-semibold text-[#526066] dark:text-[#b4c2be]"><input type="checkbox" checked={unequalSplit} onChange={(event) => setUnequalSplit(event.target.checked)} /> Use unequal split</label>
+          {unequalSplit ? <div className="share-fields"><p>Each person’s share</p>{group.members.map((member) => <label className="share-input" key={member}><span>{member}</span><input name={`share-${member}`} type="number" min="0" step="0.01" required defaultValue={editingExpense?.shares[member]} placeholder="0" /></label>)}</div> : <p className="rounded-lg border border-[#dcebe5] bg-[#f0f8f4] p-3 text-[10px] leading-5 text-[#527063] dark:border-[#2c4a40] dark:bg-[#1f342d] dark:text-[#cde5dc]">Split equally among all {group.members.length} members. Switch on unequal split to adjust individual shares.</p>}
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="primary submit-button">{editingExpense ? 'Save changes' : 'Save expense & split'}</button>
         </form>

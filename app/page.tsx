@@ -2,17 +2,33 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Check, CircleAlert, X } from 'lucide-react';
+import { ToastContainer, toast } from 'react-toastify';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { today, weekStart, formatCurrency } from '@/lib/format';
-import type { DateFilter, KhataEntry, PageName, ToastMessage, Transaction, TransactionFormState } from '@/lib/types';
+import { buildKhataReminderText, computeMonthlySummary, getDueRecurringTransactions } from '@/lib/financeHelpers';
+import type {
+  DateFilter,
+  ExpenseGroup,
+  GroupExpense,
+  KhataEntry,
+  LedgerBackup,
+  PageName,
+  Transaction,
+  TransactionFormState,
+} from '@/lib/types';
 import { useFinanceData } from '@/hooks/useFinanceData';
+import type { NotifyOptions } from '@/hooks/useFinanceData';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopBar } from '@/components/layout/AppTopBar';
 import { GroupsPage } from '@/components/screens/GroupsPage';
 import { KhataBookPage, OverviewPage, ReportsPage, SettingsPage, TransactionsPage } from '@/components/screens/FinanceScreens';
 import { KhataModal, TransactionModal } from '@/components/forms/EntryModals';
+import { PaymentModal } from '@/components/forms/PaymentModal';
+import { BudgetModal } from '@/components/forms/BudgetModal';
+import { CsvImportModal } from '@/components/forms/CsvImportModal';
+import { ConfirmModal } from '@/components/forms/ConfirmModal';
+import type { ConfirmDialogState } from '@/components/forms/ConfirmModal';
 import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
 export default function Home() {
@@ -20,42 +36,112 @@ export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState(0);
   const [dateFilter, setDateFilter] = useState<DateFilter>({ preset: 'month', startDate: today, endDate: today });
   const [khataFilter, setKhataFilter] = useState('All');
-  const [query, setQuery] = useState('');
-  const [modal, setModal] = useState<'khata' | 'transaction' | ''>('');
+  const [khataSort, setKhataSort] = useState<'newest' | 'due' | 'amount'>('newest');
+  const [overviewQuery, setOverviewQuery] = useState('');
+  const [txQuery, setTxQuery] = useState('');
+  const [khataQuery, setKhataQuery] = useState('');
+  const [txCategory, setTxCategory] = useState('All');
+  const [txType, setTxType] = useState<'all' | 'expense' | 'income'>('all');
+  const [txSort, setTxSort] = useState<'newest' | 'oldest' | 'highest' | 'lowest'>('newest');
+  const [modal, setModal] = useState<'khata' | 'transaction' | 'payment' | 'budgets' | 'importCsv' | ''>('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingEntry, setEditingEntry] = useState<KhataEntry | null>(null);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [payingEntry, setPayingEntry] = useState<KhataEntry | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const { isDark: darkMode, toggleTheme } = useDarkMode();
   const [form, setForm] = useState<TransactionFormState>({
-    title: '', amount: '', category: 'Food & dining', date: today, type: 'expense',
+    title: '', amount: '', category: 'Food & dining', date: today, type: 'expense', recurring: 'none',
   });
 
-  const notify = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    const id = Date.now();
-    setToast({ message, type, id });
-    window.setTimeout(() => setToast((current) => current?.id === id ? null : current), 3000);
+  const notify = useCallback((message: string, type: 'success' | 'error' = 'success', options?: NotifyOptions) => {
+    const showToast = type === 'error' ? toast.error : toast.success;
+    if (options?.actionLabel && options?.onAction) {
+      const actionLabel = options.actionLabel;
+      const onAction = options.onAction;
+      showToast(
+        ({ closeToast }) => (
+          <div className="flex items-center justify-between gap-3 text-[12px]">
+            <span>{message}</span>
+            <button
+              type="button"
+              onClick={() => {
+                closeToast?.();
+                onAction();
+              }}
+              className="shrink-0 rounded bg-[#2fa77d] px-2 py-0.5 text-[10px] font-bold text-white hover:bg-[#27916c]"
+            >
+              {actionLabel}
+            </button>
+          </div>
+        ),
+        { autoClose: 5000 },
+      );
+      return;
+    }
+    showToast(message);
   }, []);
 
   const {
-    transactions, entries, groups, groupExpenses, databaseStatus, authReady, authEnabled, authRequired,
-    isRefreshing, isInitialLoading, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses,
+    transactions, entries, groups, groupExpenses, budgets, databaseStatus, authReady, authEnabled, authRequired,
+    isRefreshing, isInitialLoading, refreshData, saveTransactions, saveEntries, saveGroups, saveGroupExpenses, saveBudgets, restoreBackup,
   } = useFinanceData(notify);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
   }, [darkMode]);
 
-  const monthTransactions = useMemo(
-    () => transactions.filter((transaction) => transaction.date.slice(0, 7) === today.slice(0, 7)),
+  const handleCloseModal = useCallback(() => {
+    setModal('');
+    setEditingTransaction(null);
+    setEditingEntry(null);
+    setPayingEntry(null);
+    setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense', recurring: 'none' });
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (confirmDialog) {
+          setConfirmDialog(null);
+          return;
+        }
+        if (modal) {
+          handleCloseModal();
+          return;
+        }
+      }
+      const target = event.target as HTMLElement | null;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+      if (isTyping || modal || confirmDialog || authRequired || !authReady || isInitialLoading) return;
+
+      if (event.key.toLowerCase() === 'n' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        if (page === 'KhataBook') setModal('khata');
+        else setModal('transaction');
+      } else if (event.key === '/') {
+        const searchInput = document.querySelector<HTMLInputElement>('input[data-search-input="true"]');
+        if (searchInput) {
+          event.preventDefault();
+          searchInput.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [authReady, authRequired, confirmDialog, handleCloseModal, isInitialLoading, modal, page]);
+
+  const { spent: spentThisMonth, income: incomeThisMonth } = useMemo(
+    () => computeMonthlySummary(transactions),
     [transactions],
   );
-  const spentThisMonth = monthTransactions
-    .filter((transaction) => transaction.type === 'expense')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const dueRecurring = useMemo(
+    () => getDueRecurringTransactions(transactions),
+    [transactions],
+  );
   const receivable = entries
     .filter((entry) => entry.direction === 'lent')
     .reduce((sum, entry) => sum + entry.amount - entry.paid, 0);
@@ -63,18 +149,41 @@ export default function Home() {
     .filter((entry) => entry.direction === 'borrowed')
     .reduce((sum, entry) => sum + entry.amount - entry.paid, 0);
 
-  const visibleTransactions = useMemo(() => {
-    return transactions
-      .filter((transaction) => {
-        if (dateFilter.preset === 'today') return transaction.date === today;
-        if (dateFilter.preset === 'week') return transaction.date >= weekStart && transaction.date <= today;
-        if (dateFilter.preset === 'custom') return (!dateFilter.startDate || transaction.date >= dateFilter.startDate)
+  const filterByDate = useCallback((list: Transaction[]) => {
+    return list.filter((transaction) => {
+      if (dateFilter.preset === 'today') return transaction.date === today;
+      if (dateFilter.preset === 'week') return transaction.date >= weekStart && transaction.date <= today;
+      if (dateFilter.preset === 'custom') {
+        return (!dateFilter.startDate || transaction.date >= dateFilter.startDate)
           && (!dateFilter.endDate || transaction.date <= dateFilter.endDate);
-        return transaction.date.slice(0, 7) === today.slice(0, 7);
-      })
-      .filter((transaction) => `${transaction.title} ${transaction.category}`.toLowerCase().includes(query.toLowerCase()))
+      }
+      return transaction.date.slice(0, 7) === today.slice(0, 7);
+    });
+  }, [dateFilter]);
+
+  const overviewTransactions = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.date.slice(0, 7) === today.slice(0, 7))
+      .filter((transaction) => `${transaction.title} ${transaction.category}`.toLowerCase().includes(overviewQuery.toLowerCase()))
       .sort((left, right) => right.date.localeCompare(left.date));
-  }, [transactions, dateFilter, query]);
+  }, [transactions, overviewQuery]);
+
+  const reportTransactions = useMemo(() => {
+    return filterByDate(transactions).sort((left, right) => right.date.localeCompare(left.date));
+  }, [filterByDate, transactions]);
+
+  const visibleTransactions = useMemo(() => {
+    return filterByDate(transactions)
+      .filter((transaction) => txType === 'all' || transaction.type === txType)
+      .filter((transaction) => txCategory === 'All' || transaction.category === txCategory)
+      .filter((transaction) => `${transaction.title} ${transaction.category}`.toLowerCase().includes(txQuery.toLowerCase()))
+      .sort((left, right) => {
+        if (txSort === 'oldest') return left.date.localeCompare(right.date);
+        if (txSort === 'highest') return right.amount - left.amount;
+        if (txSort === 'lowest') return left.amount - right.amount;
+        return right.date.localeCompare(left.date);
+      });
+  }, [filterByDate, transactions, txCategory, txQuery, txSort, txType]);
 
   const addTransaction = (event: FormEvent) => {
     event.preventDefault();
@@ -83,14 +192,32 @@ export default function Home() {
       notify('Enter a description and a valid amount.', 'error');
       return;
     }
-    const nextTransaction = { ...form, title: form.title.trim(), id: editingTransaction?.id || Date.now(), amount };
-    saveTransactions(editingTransaction
+    const nextTransaction: Transaction = {
+      ...form,
+      title: form.title.trim(),
+      id: editingTransaction?.id || Date.now(),
+      amount,
+    };
+    void saveTransactions(editingTransaction
       ? transactions.map((transaction) => transaction.id === editingTransaction.id ? nextTransaction : transaction)
       : [nextTransaction, ...transactions]);
-    setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense' });
-    setEditingTransaction(null);
-    setModal('');
+    handleCloseModal();
     notify(editingTransaction ? 'Transaction updated' : 'Transaction added');
+  };
+
+  const logRecurringItems = (items: Transaction[]) => {
+    const base = Date.now();
+    const generated: Transaction[] = items.map((item, index) => ({
+      id: base + index,
+      title: item.title,
+      amount: item.amount,
+      category: item.category,
+      date: today,
+      type: item.type,
+      recurring: item.recurring,
+    }));
+    void saveTransactions([...generated, ...transactions]);
+    notify(`Logged ${generated.length} recurring ${generated.length === 1 ? 'item' : 'items'}`);
   };
 
   const addKhataEntry = (event: FormEvent<HTMLFormElement>) => {
@@ -113,32 +240,173 @@ export default function Home() {
       due: String(data.get('due') || ''),
       note: String(data.get('note') || ''),
     };
-    saveEntries(editingEntry
+    void saveEntries(editingEntry
       ? entries.map((current) => current.id === editingEntry.id ? entry : current)
       : [entry, ...entries]);
-    setEditingEntry(null);
-    setModal('');
+    handleCloseModal();
     notify(editingEntry ? 'Khata entry updated' : 'Khata entry saved');
   };
 
-  const updatePayment = (entry: (typeof entries)[number]) => {
-    const rawAmount = window.prompt(`Outstanding ${formatCurrency(entry.amount - entry.paid)}. Amount paid / received?`);
-    if (rawAmount === null || rawAmount.trim() === '') return;
-    const amount = Number(rawAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      notify('Enter a valid payment amount.', 'error');
-      return;
+  const savePaymentAmount = (amount: number) => {
+    if (!payingEntry) return;
+    const nextPaid = Math.min(payingEntry.amount, Math.round((payingEntry.paid + amount) * 100) / 100);
+    void saveEntries(entries.map((item) => item.id === payingEntry.id ? { ...item, paid: nextPaid } : item));
+    handleCloseModal();
+    notify(nextPaid >= payingEntry.amount ? `${payingEntry.name} marked as settled` : 'Payment recorded');
+  };
+
+  const requestSettleKhata = (entry: KhataEntry) => {
+    const remaining = Math.max(0, Math.round((entry.amount - entry.paid) * 100) / 100);
+    setConfirmDialog({
+      title: entry.direction === 'lent' ? 'Mark Khata settled?' : 'Mark payable settled?',
+      description: entry.direction === 'lent'
+        ? 'Confirm that you received the full remaining balance from this person.'
+        : 'Confirm that you paid the full remaining balance to this person.',
+      details: `${entry.name} · ${formatCurrency(remaining)} remaining`,
+      confirmLabel: 'Confirm settle',
+      tone: 'primary',
+      onConfirm: () => {
+        const previous = entries;
+        void saveEntries(entries.map((item) => item.id === entry.id ? { ...item, paid: item.amount } : item));
+        notify(`${entry.name} marked as settled`, 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveEntries(previous);
+            notify('Settlement reverted');
+          },
+        });
+      },
+    });
+  };
+
+  const requestDeleteTransaction = (transaction: Transaction) => {
+    setConfirmDialog({
+      title: 'Delete transaction?',
+      description: 'This will remove the transaction from your ledger.',
+      details: `${transaction.title} · ${formatCurrency(transaction.amount)} (${transaction.date})`,
+      confirmLabel: 'Delete transaction',
+      tone: 'danger',
+      onConfirm: () => {
+        const previous = transactions;
+        void saveTransactions(transactions.filter((item) => item.id !== transaction.id));
+        notify(`Deleted "${transaction.title}"`, 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveTransactions(previous);
+            notify('Transaction restored');
+          },
+        });
+      },
+    });
+  };
+
+  const requestDeleteKhataEntry = (entry: KhataEntry) => {
+    const remaining = Math.max(0, entry.amount - entry.paid);
+    setConfirmDialog({
+      title: 'Delete Khata entry?',
+      description: 'Are you sure you want to remove this person’s balance record?',
+      details: `${entry.name} · ${formatCurrency(remaining)} remaining`,
+      confirmLabel: 'Delete entry',
+      tone: 'danger',
+      onConfirm: () => {
+        const previous = entries;
+        void saveEntries(entries.filter((item) => item.id !== entry.id));
+        notify(`Removed ${entry.name}'s entry`, 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveEntries(previous);
+            notify('Khata entry restored');
+          },
+        });
+      },
+    });
+  };
+
+  const requestDeleteGroup = (group: ExpenseGroup) => {
+    setConfirmDialog({
+      title: 'Delete group?',
+      description: 'This will permanently delete this trip/group and all its shared expenses.',
+      details: `${group.name} · ${group.members.length} members`,
+      confirmLabel: 'Delete group',
+      tone: 'danger',
+      onConfirm: () => {
+        const nextGroups = groups.filter((item) => item.id !== group.id);
+        void saveGroups(nextGroups);
+        void saveGroupExpenses(groupExpenses.filter((expense) => expense.groupId !== group.id));
+        setSelectedGroup(nextGroups[0]?.id || 0);
+        notify(`Deleted group "${group.name}"`);
+      },
+    });
+  };
+
+  const requestDeleteGroupExpense = (expense: GroupExpense) => {
+    setConfirmDialog({
+      title: 'Delete shared expense?',
+      description: 'Member balances and suggested settlements will be recalculated.',
+      details: `${expense.title} · ${formatCurrency(expense.amount)}`,
+      confirmLabel: 'Delete expense',
+      tone: 'danger',
+      onConfirm: () => {
+        const previous = groupExpenses;
+        void saveGroupExpenses(groupExpenses.filter((item) => item.id !== expense.id));
+        notify('Expense removed', 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveGroupExpenses(previous);
+            notify('Expense restored');
+          },
+        });
+      },
+    });
+  };
+
+  const requestSettleGroup = (groupId: number, from: string, to: string, amount: number) => {
+    setConfirmDialog({
+      title: 'Confirm group settlement?',
+      description: 'This records a settlement payment and updates everyone’s net balance.',
+      details: `${from} pays ${to} · ${formatCurrency(amount)}`,
+      confirmLabel: 'Record settlement',
+      tone: 'primary',
+      onConfirm: () => {
+        const previous = groupExpenses;
+        void saveGroupExpenses([
+          {
+            id: Date.now(),
+            groupId,
+            title: `${from} settled up with ${to}`,
+            paidBy: from,
+            amount,
+            date: today,
+            shares: { [to]: amount },
+            isSettlement: true,
+          },
+          ...groupExpenses,
+        ]);
+        notify(`Recorded ${formatCurrency(amount)} settlement from ${from} to ${to}`, 'success', {
+          actionLabel: 'Undo',
+          onAction: () => {
+            void saveGroupExpenses(previous);
+            notify('Settlement reverted');
+          },
+        });
+      },
+    });
+  };
+
+  const copyKhataReminder = async (entry: KhataEntry) => {
+    const message = buildKhataReminderText(entry);
+    try {
+      await navigator.clipboard.writeText(message);
+      notify(`Reminder copied for ${entry.name}`);
+    } catch {
+      notify(message);
     }
-    saveEntries(entries.map((item) => item.id === entry.id
-      ? { ...item, paid: Math.min(item.amount, item.paid + amount) }
-      : item));
-    notify('Payment updated');
   };
 
   const exportReport = () => {
     const rows = [
       ['Date', 'Description', 'Category', 'Type', 'Amount'],
-      ...visibleTransactions.map((transaction) => [transaction.date, transaction.title, transaction.category, transaction.type, String(transaction.amount)]),
+      ...reportTransactions.map((transaction) => [transaction.date, transaction.title, transaction.category, transaction.type, String(transaction.amount)]),
     ];
     const csv = rows.map((row) => row.map((field) => `"${String(field).replaceAll('"', '""')}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -149,13 +417,25 @@ export default function Home() {
     URL.revokeObjectURL(url);
     notify('Report downloaded');
   };
-  
-  const handleCloseModal = () => {
-    setModal('');
-    setEditingTransaction(null);
-    setEditingEntry(null);
-    setForm({ title: '', amount: '', category: 'Food & dining', date: today, type: 'expense' });
-  }
+
+  const exportBackup = () => {
+    const backup: LedgerBackup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      transactions,
+      entries,
+      groups,
+      groupExpenses,
+      budgets,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ledger-backup-${today}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify('Full JSON backup downloaded');
+  };
 
   const submitLogin = async (event: FormEvent) => {
     event.preventDefault();
@@ -189,9 +469,10 @@ export default function Home() {
     }
   };
 
-  const removeTransaction = (transaction: Transaction) => {
-    saveTransactions(transactions.filter((item) => item.id !== transaction.id));
-    notify('Transaction deleted');
+  const openCategoryInTransactions = (category: string) => {
+    setTxCategory(category);
+    setTxType('expense');
+    setPage('Transactions');
   };
 
   if (authRequired) {
@@ -248,86 +529,138 @@ export default function Home() {
               setSelected={setSelectedGroup}
               onToast={notify}
               onCreateGroup={(group) => {
-                saveGroups([group, ...groups]);
+                void saveGroups([group, ...groups]);
                 setSelectedGroup(group.id);
                 notify('Group created');
               }}
               onUpdateGroup={(updatedGroup) => {
-                saveGroups(groups.map((group) => group.id === updatedGroup.id ? updatedGroup : group));
+                void saveGroups(groups.map((group) => group.id === updatedGroup.id ? updatedGroup : group));
                 notify('Trip updated');
               }}
+              onDeleteGroup={requestDeleteGroup}
               onAddExpense={(expense) => {
-                saveGroupExpenses([expense, ...groupExpenses]);
+                void saveGroupExpenses([expense, ...groupExpenses]);
                 notify('Shared expense added');
               }}
               onUpdateExpense={(updatedExpense) => {
-                saveGroupExpenses(groupExpenses.map((expense) => expense.id === updatedExpense.id ? updatedExpense : expense));
+                void saveGroupExpenses(groupExpenses.map((expense) => expense.id === updatedExpense.id ? updatedExpense : expense));
                 notify('Shared expense updated');
               }}
-              onDeleteExpense={(id) => {
-                saveGroupExpenses(groupExpenses.filter((expense) => expense.id !== id));
-                notify('Expense removed');
-              }}
+              onDeleteExpense={requestDeleteGroupExpense}
+              onSettleUp={requestSettleGroup}
             />
           ) : page === 'KhataBook' ? (
             <KhataBookPage
               entries={entries}
               lentTotal={receivable}
               borrowedTotal={payable}
-              query={query}
-              onQueryChange={setQuery}
+              query={khataQuery}
+              onQueryChange={setKhataQuery}
               filter={khataFilter}
               onFilterChange={setKhataFilter}
+              sortBy={khataSort}
+              onSortChange={setKhataSort}
               isLoading={isInitialLoading}
               onAddEntry={() => setModal('khata')}
-              onPayment={updatePayment}
-              onDelete={(entry) => {
-                if (window.confirm('Delete entry?')) {
-                  saveEntries(entries.filter((item) => item.id !== entry.id));
-                  notify('Khata entry deleted');
-                }
+              onPayment={(entry) => {
+                setPayingEntry(entry);
+                setModal('payment');
               }}
+              onSettle={requestSettleKhata}
+              onDelete={requestDeleteKhataEntry}
               onEdit={(entry) => { setEditingEntry(entry); setModal('khata'); }}
-              onToast={notify}
+              onRemind={(entry) => { void copyKhataReminder(entry); }}
             />
           ) : page === 'Overview' ? (
             <OverviewPage
               spent={spentThisMonth}
+              income={incomeThisMonth}
               peopleOwe={receivable}
               youOwe={payable}
-              transactions={visibleTransactions.slice(0, 7)}
-              query={query}
-              onQueryChange={setQuery}
+              allTransactions={transactions}
+              transactions={overviewTransactions.slice(0, 7)}
+              budgets={budgets}
+              dueRecurring={dueRecurring}
+              query={overviewQuery}
+              onQueryChange={setOverviewQuery}
               isLoading={isInitialLoading}
               onAddTransaction={() => setModal('transaction')}
               onNavigate={setPage}
-              onRemoveTransaction={removeTransaction}
+              onSelectCategory={openCategoryInTransactions}
+              onManageBudgets={() => setModal('budgets')}
+              onLogRecurring={logRecurringItems}
+              onRemoveTransaction={requestDeleteTransaction}
               onEditTransaction={(transaction) => {
                 setEditingTransaction(transaction);
-                setForm({ title: transaction.title, amount: String(transaction.amount), category: transaction.category, date: transaction.date, type: transaction.type });
+                setForm({
+                  title: transaction.title,
+                  amount: String(transaction.amount),
+                  category: transaction.category,
+                  date: transaction.date,
+                  type: transaction.type,
+                  recurring: transaction.recurring || 'none',
+                });
                 setModal('transaction');
               }}
             />
           ) : page === 'Transactions' ? (
             <TransactionsPage
-              query={query}
-              onQueryChange={setQuery}
+              query={txQuery}
+              onQueryChange={setTxQuery}
               dateFilter={dateFilter}
               onDateFilterChange={setDateFilter}
+              typeFilter={txType}
+              onTypeFilterChange={setTxType}
+              categoryFilter={txCategory}
+              onCategoryFilterChange={setTxCategory}
+              sortBy={txSort}
+              onSortChange={setTxSort}
               transactions={visibleTransactions}
+              dueRecurring={dueRecurring}
               isLoading={isInitialLoading}
               onAddTransaction={() => setModal('transaction')}
-              onRemoveTransaction={removeTransaction}
+              onImportCsv={() => setModal('importCsv')}
+              onLogRecurring={logRecurringItems}
+              onRemoveTransaction={requestDeleteTransaction}
               onEditTransaction={(transaction) => {
                 setEditingTransaction(transaction);
-                setForm({ title: transaction.title, amount: String(transaction.amount), category: transaction.category, date: transaction.date, type: transaction.type });
+                setForm({
+                  title: transaction.title,
+                  amount: String(transaction.amount),
+                  category: transaction.category,
+                  date: transaction.date,
+                  type: transaction.type,
+                  recurring: transaction.recurring || 'none',
+                });
                 setModal('transaction');
               }}
             />
           ) : page === 'Reports' ? (
-            <ReportsPage dateFilter={dateFilter} onDateFilterChange={setDateFilter} transactions={visibleTransactions} peopleOwe={receivable} isLoading={isInitialLoading} onExport={exportReport} />
+            <ReportsPage
+              dateFilter={dateFilter}
+              onDateFilterChange={setDateFilter}
+              allTransactions={transactions}
+              transactions={reportTransactions}
+              budgets={budgets}
+              peopleOwe={receivable}
+              isLoading={isInitialLoading}
+              onExport={exportReport}
+              onManageBudgets={() => setModal('budgets')}
+              onSelectCategory={openCategoryInTransactions}
+            />
           ) : (
-            <SettingsPage databaseStatus={databaseStatus} />
+            <SettingsPage
+              databaseStatus={databaseStatus}
+              isLoading={isInitialLoading}
+              onManageBudgets={() => setModal('budgets')}
+              onImportCsv={() => setModal('importCsv')}
+              onExportBackup={exportBackup}
+              onRestoreBackup={async (backup) => {
+                const ok = await restoreBackup(backup);
+                if (ok) notify('Backup restored successfully');
+              }}
+              onToast={notify}
+            />
           )}
         </div>
         <footer>
@@ -338,13 +671,43 @@ export default function Home() {
 
       {modal === 'khata' && <KhataModal entry={editingEntry || undefined} onSave={addKhataEntry} onClose={handleCloseModal} />}
       {modal === 'transaction' && <TransactionModal mode={editingTransaction ? 'edit' : 'create'} form={form} onChange={setForm} onSave={addTransaction} onClose={handleCloseModal} />}
-      {toast && (
-        <div className={`toast ${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'} aria-live={toast.type === 'error' ? 'assertive' : 'polite'}>
-          {toast.type === 'error' ? <CircleAlert size={17} /> : <Check size={16} />}
-          <span>{toast.message}</span>
-          <button type="button" className="toast-close" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={14} /></button>
-        </div>
+      {modal === 'payment' && payingEntry && <PaymentModal entry={payingEntry} onSave={savePaymentAmount} onClose={handleCloseModal} />}
+      {modal === 'budgets' && (
+        <BudgetModal
+          budgets={budgets}
+          onSave={(nextBudgets) => {
+            void saveBudgets(nextBudgets);
+            handleCloseModal();
+            notify('Monthly budgets saved');
+          }}
+          onClose={handleCloseModal}
+        />
       )}
+      {modal === 'importCsv' && (
+        <CsvImportModal
+          onImport={(imported) => {
+            void saveTransactions([...imported, ...transactions]);
+            handleCloseModal();
+            notify(`Imported ${imported.length} transactions`);
+          }}
+          onClose={handleCloseModal}
+        />
+      )}
+      {confirmDialog && (
+        <ConfirmModal
+          {...confirmDialog}
+          onClose={() => setConfirmDialog(null)}
+        />
+      )}
+
+      <ToastContainer
+        position="bottom-right"
+        autoClose={3500}
+        newestOnTop
+        closeOnClick={false}
+        pauseOnHover
+        theme={darkMode ? 'dark' : 'light'}
+      />
     </div>
   );
 }

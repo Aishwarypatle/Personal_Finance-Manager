@@ -1,4 +1,5 @@
 export type PageName = 'Overview' | 'Transactions' | 'KhataBook' | 'Groups' | 'Reports' | 'Settings';
+export type RecurringFrequency = 'none' | 'weekly' | 'monthly';
 export type Transaction = {
   id: number;
   title: string;
@@ -6,6 +7,7 @@ export type Transaction = {
   category: string;
   date: string;
   type: 'expense' | 'income';
+  recurring?: RecurringFrequency;
 };
 export type KhataEntry = {
   id: number;
@@ -26,20 +28,42 @@ export type GroupExpense = {
   amount: number;
   date: string;
   shares: Record<string, number>;
+  isSettlement?: boolean;
 };
 export type ExpenseGroup = { id: number; name: string; members: string[] };
+export type BudgetRule = {
+  id: string;
+  category: string;
+  limit: number;
+};
 export type DatabaseStatus = 'connecting' | 'connected' | 'setup-required';
 export type ToastType = 'success' | 'error';
-export type ToastMessage = { message: string; type: ToastType; id: number };
+export type ToastMessage = {
+  message: string;
+  type: ToastType;
+  id: number;
+  actionLabel?: string;
+  onAction?: () => void;
+};
 export type TransactionFormState = {
   title: string;
   amount: string;
   category: string;
   date: string;
   type: 'expense' | 'income';
+  recurring: RecurringFrequency;
 };
 export type DateFilter = {
   preset: 'month' | 'today' | 'week' | 'custom';
   startDate: string;
   endDate: string;
+};
+export type LedgerBackup = {
+  version: 1;
+  exportedAt: string;
+  transactions: Transaction[];
+  entries: KhataEntry[];
+  groups: ExpenseGroup[];
+  groupExpenses: GroupExpense[];
+  budgets: BudgetRule[];
 };

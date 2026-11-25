@@ -28,6 +28,17 @@ export function TransactionModal({ form, mode = 'create', onChange, onSave, onCl
           <label className="field">Category<select value={form.category} onChange={(event) => onChange({ ...form, category: event.target.value })}>{categories.map(([name]) => <option key={name}>{name}</option>)}</select></label>
           <label className="field">Date<input type="date" value={form.date} onChange={(event) => onChange({ ...form, date: event.target.value })}/></label>
         </div>
+        <label className="field">
+          Repeat
+          <select
+            value={form.recurring}
+            onChange={(event) => onChange({ ...form, recurring: event.target.value as TransactionFormState['recurring'] })}
+          >
+            <option value="none">Does not repeat</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </label>
         <button type="submit" className="primary submit-button"><Plus size={16}/>{mode === 'edit' ? 'Save changes' : 'Save transaction'}</button>
       </form>
     </div>

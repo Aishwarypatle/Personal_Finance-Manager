@@ -1,4 +1,6 @@
+import type { ChangeEvent } from 'react';
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
@@ -6,85 +8,240 @@ import {
   Download,
   HandCoins,
   Plus,
+  Repeat,
   Search,
+  SlidersHorizontal,
+  Upload,
 } from 'lucide-react';
 import { categories } from '@/lib/categories';
 import { formatCurrency } from '@/lib/format';
-import type { DatabaseStatus, KhataEntry, ToastType, Transaction } from '@/lib/types';
+import { computeBudgetProgress, getKhataDueStatus } from '@/lib/financeHelpers';
+import type {
+  BudgetRule,
+  DatabaseStatus,
+  DateFilter,
+  KhataEntry,
+  LedgerBackup,
+  ToastType,
+  Transaction,
+} from '@/lib/types';
 import { KhataRow } from '@/components/shared/KhataRow';
 import { PageHeading } from '@/components/shared/PageHeading';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { SpendingCharts } from '@/components/shared/SpendingCharts';
 import { TransactionList } from '@/components/shared/TransactionList';
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
-import type { DateFilter } from '@/lib/types';
 
 type SearchProps = {
   query: string;
   onQueryChange: (value: string) => void;
 };
 
+type BudgetProgressProps = {
+  allTransactions: Transaction[];
+  budgets: BudgetRule[];
+  onManageBudgets: () => void;
+};
+
+function BudgetStatusSection({ allTransactions, budgets, onManageBudgets }: BudgetProgressProps) {
+  const progress = computeBudgetProgress(allTransactions, budgets);
+
+  return (
+    <section className="mt-4 rounded-[10px] border border-[#edf0f2] bg-white p-[18px] shadow-[0_2px_9px_#1b303b05] dark:border-[#2b3a3c] dark:bg-[#1a2628] dark:shadow-none">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="font-display text-[13px] font-bold text-[#253138] dark:text-[#e4ecea]">Monthly budgets</h2>
+          <p className="mt-1 text-[10px] text-[#9aa3a7]">Track spending against your monthly limits</p>
+        </div>
+        <button
+          type="button"
+          onClick={onManageBudgets}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[#e5ebe8] bg-white px-2.5 py-1.5 !text-[10px] view-all !font-bold text-[#4d685f] hover:border-[#32a881] hover:text-[#278c6a] dark:border-[#344446] dark:bg-[#172224] dark:text-[#c7d3d0]"
+        >
+          <SlidersHorizontal size={12} /> {progress.length ? 'Edit' : 'Set'}
+        </button>
+      </div>
+
+      {progress.length === 0 ? (
+        <p className="mt-3 text-[11px] text-[#9aa3a7]">
+          No monthly budgets set yet. Set an overall or category limit to watch your pace.
+        </p>
+      ) : (
+        <div className="mt-3.5 grid max-[720px]:grid-cols-1">
+          {progress.map((item) => {
+            const barColor =
+              item.status === 'over' ? '#d45a46' : item.status === 'warning' ? '#dfa23a' : '#32a881';
+            return (
+              <div key={item.id} className="rounded-lg border border-[#f0f2f2] bg-[#fafcfb] p-3 dark:border-[#2b393b] dark:bg-[#202e30]">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-[#2d3b41] dark:text-[#e0e9e6]">{item.category}</span>
+                  <span className={item.status === 'over' ? 'font-bold text-[#c95540]' : 'text-[#7f8c90] dark:text-[#a8b6b2]'}>
+                    {formatCurrency(item.spent)} / {formatCurrency(item.limit)} ({item.percent}%)
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e9eeec] dark:bg-[#2b393b]">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${Math.min(100, item.percent)}%`, backgroundColor: barColor }}
+                  />
+                </div>
+                <div className="mt-1.5 text-[9px] text-[#8d989c]">
+                  {item.status === 'over'
+                    ? `Exceeded by ${formatCurrency(item.spent - item.limit)}`
+                    : `${formatCurrency(item.remaining)} remaining`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 type OverviewProps = SearchProps & {
   spent: number;
+  income: number;
   peopleOwe: number;
   youOwe: number;
+  allTransactions: Transaction[];
   transactions: Transaction[];
+  budgets: BudgetRule[];
+  dueRecurring: Transaction[];
   isLoading?: boolean;
   onAddTransaction: () => void;
   onNavigate: (page: 'KhataBook' | 'Transactions') => void;
+  onSelectCategory: (category: string) => void;
+  onManageBudgets: () => void;
+  onLogRecurring: (items: Transaction[]) => void;
   onRemoveTransaction: (transaction: Transaction) => void;
   onEditTransaction: (transaction: Transaction) => void;
 };
 
 export function OverviewPage({
   spent,
+  income,
   peopleOwe,
   youOwe,
+  allTransactions,
   transactions,
+  budgets,
+  dueRecurring,
   query,
   onQueryChange,
   isLoading = false,
   onAddTransaction,
   onNavigate,
+  onSelectCategory,
+  onManageBudgets,
+  onLogRecurring,
   onRemoveTransaction,
   onEditTransaction,
 }: OverviewProps) {
+  const net = income - spent;
+
   return (
     <>
       <PageHeading
         eyebrow="YOUR PERSONAL FINANCE"
         title={<>Your money, in <em>good shape.</em></>}
-        subtitle="Here’s what’s happening with your finances."
+        subtitle="Here’s what’s happening with your finances. Press N to quick-add."
         action={<button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>}
       />
-      <div className="summary-grid" aria-busy={isLoading}>
+
+      {!isLoading && dueRecurring.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#d6ece2] bg-[#eff8f3] px-4 py-3 dark:border-[#2c4a40] dark:bg-[#1b302a]">
+          <div className="flex items-center gap-2.5 text-[11px] text-[#285a47] dark:text-[#b9dfd0]">
+            <Repeat size={16} className="shrink-0 text-[#2fa77d]" />
+            <span>
+              <b>{dueRecurring.length} recurring {dueRecurring.length === 1 ? 'item is' : 'items are'} due</b>
+              <span className="ml-1.5 text-[#5b7e70] dark:text-[#96bdb0]">
+                ({dueRecurring.slice(0, 2).map((item) => item.title).join(', ')}{dueRecurring.length > 2 ? ` +${dueRecurring.length - 2} more` : ''})
+              </span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {dueRecurring.length === 1 ? (
+              <button
+                type="button"
+                onClick={() => onLogRecurring(dueRecurring)}
+                className="rounded-md bg-[#2fa77d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#27916c]"
+              >
+                Log {formatCurrency(dueRecurring[0].amount)}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onLogRecurring(dueRecurring)}
+                className="rounded-md bg-[#2fa77d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#27916c]"
+              >
+                Log all ({dueRecurring.length})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-4 gap-3.5 max-[1100px]:grid-cols-2 max-[560px]:gap-2.5" aria-busy={isLoading}>
         <div className="summary-card balance-card">
           <div className="card-top">Spent this month <ArrowUpRight /></div>
           <div className="big-number">
-            {isLoading ? <Skeleton inverse className="h-[34px] w-36 max-[560px]:h-[30px] max-[560px]:w-28" /> : formatCurrency(spent)}
+            {isLoading ? <Skeleton inverse className="h-[34px] w-32 max-[560px]:h-[28px] max-[560px]:w-24" /> : formatCurrency(spent)}
           </div>
           <div className="balance-foot">Personal expenses this month</div>
         </div>
         <div className="summary-card">
+          <div className="card-top">Income this month <ArrowDownRight /></div>
+          <div className="big-number !text-[#278c6a]">
+            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-20" /> : formatCurrency(income)}
+          </div>
+          <div className="text-[10px] font-semibold text-[#7d8a8f]">
+            {isLoading ? (
+              <Skeleton className="h-2.5 w-24" />
+            ) : (
+              <span className={net >= 0 ? 'text-[#2fa77d]' : 'text-[#c95540]'}>
+                {net >= 0 ? `Saved ${formatCurrency(net)}` : `Deficit ${formatCurrency(Math.abs(net))}`}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="summary-card">
           <div className="card-top">People owe you <ArrowUpRight /></div>
           <div className="big-number !text-green-700">
-            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-24" /> : formatCurrency(peopleOwe)}
+            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-20" /> : formatCurrency(peopleOwe)}
           </div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View receivables <ArrowRight size={14} /></button>
         </div>
         <div className="summary-card">
           <div className="card-top">You owe people <ArrowDownRight /></div>
           <div className="big-number !text-red-900">
-            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-24" /> : formatCurrency(youOwe)}
+            {isLoading ? <Skeleton className="h-[30px] w-28 max-[560px]:h-[24px] max-[560px]:w-20" /> : formatCurrency(youOwe)}
           </div>
           <button type="button" className="text-link" onClick={() => onNavigate('KhataBook')}>View payables <ArrowRight size={14} /></button>
         </div>
       </div>
+
+      <SpendingCharts
+        allTransactions={allTransactions}
+        periodTransactions={transactions}
+        isLoading={isLoading}
+        onSelectCategory={onSelectCategory}
+      />
+
+      {!isLoading && (
+        <BudgetStatusSection
+          allTransactions={allTransactions}
+          budgets={budgets}
+          onManageBudgets={onManageBudgets}
+        />
+      )}
+
       <section className="panel transactions-panel">
         <div className="panel-head transaction-head">
           <div><h2>Recent transactions</h2><p>Your latest money moves</p></div>
           <div className="tx-tools">
-            <label className="searchbox"><Search size={15} /><input placeholder="Search transactions" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <button type="button" className="view-all" onClick={() => onNavigate('Transactions')}>View all <ArrowRight size={14} /></button>
+            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search transactions (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
+            <button type="button" className="view-all !font-bold" onClick={() => onNavigate('Transactions')}>View all <ArrowRight size={14} /></button>
           </div>
         </div>
         <TransactionList transactions={transactions} isLoading={isLoading} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
@@ -99,12 +256,15 @@ type KhataBookProps = SearchProps & {
   borrowedTotal: number;
   filter: string;
   onFilterChange: (value: string) => void;
+  sortBy: 'newest' | 'due' | 'amount';
+  onSortChange: (value: 'newest' | 'due' | 'amount') => void;
   isLoading?: boolean;
   onAddEntry: () => void;
   onPayment: (entry: KhataEntry) => void;
+  onSettle: (entry: KhataEntry) => void;
   onDelete: (entry: KhataEntry) => void;
   onEdit: (entry: KhataEntry) => void;
-  onToast: (message: string, type?: ToastType) => void;
+  onRemind: (entry: KhataEntry) => void;
 };
 
 export function KhataBookPage({
@@ -115,16 +275,42 @@ export function KhataBookPage({
   onQueryChange,
   filter,
   onFilterChange,
+  sortBy,
+  onSortChange,
   isLoading = false,
   onAddEntry,
   onPayment,
+  onSettle,
   onDelete,
   onEdit,
+  onRemind,
 }: KhataBookProps) {
-  const filteredEntries = entries.filter((entry) =>
-    (filter === 'All' || entry.direction === filter)
-    && `${entry.name} ${entry.phone} ${entry.note}`.toLowerCase().includes(query.toLowerCase()),
-  );
+  const overdueEntries = entries.filter((entry) => {
+    const status = getKhataDueStatus(entry);
+    return status === 'overdue' || status === 'due-today';
+  });
+
+  const filteredEntries = entries
+    .filter((entry) => {
+      const status = getKhataDueStatus(entry);
+      const matchesFilter =
+        filter === 'All'
+          ? true
+          : filter === 'overdue'
+            ? status === 'overdue' || status === 'due-today'
+            : entry.direction === filter;
+      const matchesQuery = `${entry.name} ${entry.phone} ${entry.note}`.toLowerCase().includes(query.toLowerCase());
+      return matchesFilter && matchesQuery;
+    })
+    .sort((left, right) => {
+      if (sortBy === 'amount') return (right.amount - right.paid) - (left.amount - left.paid);
+      if (sortBy === 'due') {
+        const leftDue = left.due || '9999-12-31';
+        const rightDue = right.due || '9999-12-31';
+        return leftDue.localeCompare(rightDue);
+      }
+      return right.date.localeCompare(left.date);
+    });
 
   return (
     <>
@@ -134,6 +320,23 @@ export function KhataBookPage({
         subtitle="Track money you give and money you take."
         action={<button type="button" className="primary" onClick={onAddEntry} disabled={isLoading}><Plus size={17} /> Add entry</button>}
       />
+
+      {!isLoading && overdueEntries.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#f5d5cc] bg-[#fff5f2] px-4 py-3 text-[11px] text-[#9b4433] dark:border-[#4b2d28] dark:bg-[#2a1d1b] dark:text-[#f1a89a]">
+          <span className="flex items-center gap-2">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span><b>{overdueEntries.length} {overdueEntries.length === 1 ? 'entry is' : 'entries are'} due or overdue</b> — follow up to keep balances moving.</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onFilterChange(filter === 'overdue' ? 'All' : 'overdue')}
+            className="rounded-md border border-[#e7bcb1] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#9b4433] dark:border-[#5e3933] dark:bg-[#1a2628] dark:text-[#f1a89a]"
+          >
+            {filter === 'overdue' ? 'Show all entries' : 'Show due / overdue'}
+          </button>
+        </div>
+      )}
+
       <div className="khata-summary" aria-busy={isLoading}>
         <div className="khata-total receive"><ArrowUpRight /><div><small>People owe you</small><strong className="!text-green-700">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(lentTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'lent' && entry.amount > entry.paid).length} open entries`}</span></div></div>
         <div className="khata-total pay"><ArrowDownRight /><div><small>You owe people</small><strong className="!text-red-900">{isLoading ? <Skeleton className="h-[25px] w-28" /> : formatCurrency(borrowedTotal)}</strong><span>{isLoading ? <Skeleton className="h-2.5 w-20" /> : `${entries.filter((entry) => entry.direction === 'borrowed' && entry.amount > entry.paid).length} open entries`}</span></div></div>
@@ -142,10 +345,18 @@ export function KhataBookPage({
       <section className="panel full-panel">
         <div className="panel-head">
           <div><h2>People & entries</h2><p>Record details and keep repayments up to date</p></div>
-          <div className="tx-tools">
-            <label className="searchbox"><Search size={15} /><input placeholder="Search people or notes" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
-            <select className="select-button" value={filter} onChange={(event) => onFilterChange(event.target.value)}>
-              <option>All</option><option value="lent">They owe me</option><option value="borrowed">I owe them</option>
+          <div className="tx-tools flex-wrap">
+            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search people or notes" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
+            <select className="select-button" value={filter} onChange={(event) => onFilterChange(event.target.value)} aria-label="Filter khata entries">
+              <option value="All">All</option>
+              <option value="lent">They owe me</option>
+              <option value="borrowed">I owe them</option>
+              <option value="overdue">Due / Overdue</option>
+            </select>
+            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'due' | 'amount')} aria-label="Sort khata entries">
+              <option value="newest">Newest</option>
+              <option value="due">Earliest due</option>
+              <option value="amount">Highest balance</option>
             </select>
           </div>
         </div>
@@ -169,7 +380,17 @@ export function KhataBookPage({
                 <Skeleton className="h-7 w-24 rounded-md" />
               </div>
             </div>
-          )) : filteredEntries.length ? filteredEntries.map((entry) => <KhataRow key={entry.id} entry={entry} onPayment={() => onPayment(entry)} onDelete={() => onDelete(entry)} onEdit={() => onEdit(entry)} />) : <div className="empty-state"><BookUser /> No matching entries.</div>}
+          )) : filteredEntries.length ? filteredEntries.map((entry) => (
+            <KhataRow
+              key={entry.id}
+              entry={entry}
+              onPayment={() => onPayment(entry)}
+              onSettle={() => onSettle(entry)}
+              onDelete={() => onDelete(entry)}
+              onEdit={() => onEdit(entry)}
+              onRemind={() => onRemind(entry)}
+            />
+          )) : <div className="empty-state"><BookUser /> No matching entries.</div>}
         </div>
       </section>
       <div className="khata-tip"><HandCoins size={18} /> Add repayments as they happen to keep outstanding balances accurate.</div>
@@ -180,31 +401,98 @@ export function KhataBookPage({
 type TransactionsProps = SearchProps & {
   dateFilter: DateFilter;
   onDateFilterChange: (filter: DateFilter) => void;
+  typeFilter: 'all' | 'expense' | 'income';
+  onTypeFilterChange: (value: 'all' | 'expense' | 'income') => void;
+  categoryFilter: string;
+  onCategoryFilterChange: (value: string) => void;
+  sortBy: 'newest' | 'oldest' | 'highest' | 'lowest';
+  onSortChange: (value: 'newest' | 'oldest' | 'highest' | 'lowest') => void;
   transactions: Transaction[];
+  dueRecurring: Transaction[];
   isLoading?: boolean;
   onAddTransaction: () => void;
+  onImportCsv: () => void;
+  onLogRecurring: (items: Transaction[]) => void;
   onRemoveTransaction: (transaction: Transaction) => void;
   onEditTransaction: (transaction: Transaction) => void;
 };
 
-export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilterChange, transactions, isLoading = false, onAddTransaction, onRemoveTransaction, onEditTransaction }: TransactionsProps) {
+export function TransactionsPage({
+  query,
+  onQueryChange,
+  dateFilter,
+  onDateFilterChange,
+  typeFilter,
+  onTypeFilterChange,
+  categoryFilter,
+  onCategoryFilterChange,
+  sortBy,
+  onSortChange,
+  transactions,
+  dueRecurring,
+  isLoading = false,
+  onAddTransaction,
+  onImportCsv,
+  onLogRecurring,
+  onRemoveTransaction,
+  onEditTransaction,
+}: TransactionsProps) {
   return (
     <>
       <PageHeading
         eyebrow="YOUR MONEY, MOVING"
         title="Transactions"
         subtitle="Track everyday expenses and income."
-        action={<button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>}
+        action={
+          <div className="heading-actions">
+            <button type="button" className="outline-button" onClick={onImportCsv} disabled={isLoading}><Upload size={14} /> Import CSV</button>
+            <button type="button" className="primary" onClick={onAddTransaction} disabled={isLoading}><Plus size={17} /> Add transaction</button>
+          </div>
+        }
       />
+
+      {!isLoading && dueRecurring.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#d6ece2] bg-[#eff8f3] px-4 py-2.5 text-[11px] text-[#285a47] dark:border-[#2c4a40] dark:bg-[#1b302a] dark:text-[#b9dfd0]">
+          <span className="flex items-center gap-2"><Repeat size={14} /> {dueRecurring.length} recurring {dueRecurring.length === 1 ? 'transaction is' : 'transactions are'} due this period.</span>
+          <button type="button" onClick={() => onLogRecurring(dueRecurring)} className="rounded-md bg-[#2fa77d] px-2.5 py-1 text-[10px] font-semibold text-white">Log due items</button>
+        </div>
+      )}
+
       <section className="panel full-panel">
-        <div className="panel-head">
-          <div><h2>All transactions</h2><p>Search and filter your activity</p></div>
-          <div className="tx-tools">
-            <label className="searchbox"><Search size={15} /><input placeholder="Search" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
+        <div className="panel-head flex-wrap gap-3">
+          <div><h2>All transactions</h2><p>Search, group, and filter your activity</p></div>
+          <div className="tx-tools flex-wrap">
+            <div className="inline-flex rounded-md border border-[#e9edef] bg-[#f7f9f8] p-0.5 dark:border-[#344446] dark:bg-[#172224]">
+              {(['all', 'expense', 'income'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onTypeFilterChange(option)}
+                  className={`rounded px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors ${
+                    typeFilter === option
+                      ? 'bg-white text-[#278c6a] shadow-xs dark:bg-[#243638] dark:text-[#73d2a9]'
+                      : 'text-[#7f8c91] dark:text-[#9baaa7]'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <label className="searchbox"><Search size={15} /><input data-search-input="true" placeholder="Search (/)" value={query} onChange={(event) => onQueryChange(event.target.value)} /></label>
+            <select className="select-button" value={categoryFilter} onChange={(event) => onCategoryFilterChange(event.target.value)} aria-label="Filter by category">
+              <option value="All">All categories</option>
+              {categories.map(([name]) => <option key={name} value={name}>{name}</option>)}
+            </select>
             <DateRangeFilter value={dateFilter} onChange={onDateFilterChange} />
+            <select className="select-button" value={sortBy} onChange={(event) => onSortChange(event.target.value as 'newest' | 'oldest' | 'highest' | 'lowest')} aria-label="Sort transactions">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="highest">Highest amount</option>
+              <option value="lowest">Lowest amount</option>
+            </select>
           </div>
         </div>
-        <TransactionList transactions={transactions} isLoading={isLoading} onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
+        <TransactionList transactions={transactions} isLoading={isLoading} groupByDate onRemove={onRemoveTransaction} onEdit={onEditTransaction} />
       </section>
     </>
   );
@@ -213,13 +501,28 @@ export function TransactionsPage({ query, onQueryChange, dateFilter, onDateFilte
 type ReportsProps = {
   dateFilter: DateFilter;
   onDateFilterChange: (filter: DateFilter) => void;
+  allTransactions: Transaction[];
   transactions: Transaction[];
+  budgets: BudgetRule[];
   peopleOwe: number;
   isLoading?: boolean;
   onExport: () => void;
+  onManageBudgets: () => void;
+  onSelectCategory: (category: string) => void;
 };
 
-export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peopleOwe, isLoading = false, onExport }: ReportsProps) {
+export function ReportsPage({
+  dateFilter,
+  onDateFilterChange,
+  allTransactions,
+  transactions,
+  budgets,
+  peopleOwe,
+  isLoading = false,
+  onExport,
+  onManageBudgets,
+  onSelectCategory,
+}: ReportsProps) {
   const expenses = transactions.filter((transaction) => transaction.type === 'expense');
   const income = transactions.filter((transaction) => transaction.type === 'income');
   const totalSpent = expenses.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -230,7 +533,7 @@ export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peop
       <PageHeading
         eyebrow="YOUR FINANCIAL SNAPSHOT"
         title="Reports"
-        subtitle="Review and export your spending."
+        subtitle="Review charts, budgets, and export your spending."
         action={<button type="button" className="primary" onClick={onExport} disabled={isLoading}><Download size={16} /> Export CSV</button>}
       />
       <section className="panel report-panel" aria-busy={isLoading}>
@@ -261,14 +564,76 @@ export function ReportsPage({ dateFilter, onDateFilterChange, transactions, peop
           </div>;
         })}
       </section>
+
+      <SpendingCharts
+        allTransactions={allTransactions}
+        periodTransactions={transactions}
+        isLoading={isLoading}
+        onSelectCategory={onSelectCategory}
+      />
+
+      {!isLoading && (
+        <BudgetStatusSection
+          allTransactions={allTransactions}
+          budgets={budgets}
+          onManageBudgets={onManageBudgets}
+        />
+      )}
     </>
   );
 }
 
-export function SettingsPage({ databaseStatus }: { databaseStatus: DatabaseStatus }) {
+type SettingsProps = {
+  databaseStatus: DatabaseStatus;
+  isLoading?: boolean;
+  onManageBudgets: () => void;
+  onImportCsv: () => void;
+  onExportBackup: () => void;
+  onRestoreBackup: (backup: LedgerBackup) => Promise<void>;
+  onToast: (message: string, type?: ToastType) => void;
+};
+
+export function SettingsPage({
+  databaseStatus,
+  isLoading = false,
+  onManageBudgets,
+  onImportCsv,
+  onExportBackup,
+  onRestoreBackup,
+  onToast,
+}: SettingsProps) {
+  const handleBackupFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<LedgerBackup>;
+      if (
+        !Array.isArray(parsed.transactions)
+        || !Array.isArray(parsed.entries)
+        || !Array.isArray(parsed.groups)
+        || !Array.isArray(parsed.groupExpenses)
+      ) {
+        onToast('Invalid Ledger backup file.', 'error');
+        return;
+      }
+      await onRestoreBackup({
+        version: 1,
+        exportedAt: parsed.exportedAt || new Date().toISOString(),
+        transactions: parsed.transactions,
+        entries: parsed.entries,
+        groups: parsed.groups,
+        groupExpenses: parsed.groupExpenses,
+        budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+      });
+    } catch {
+      onToast('Could not read the selected JSON backup.', 'error');
+    }
+  };
+
   return (
     <>
-      <PageHeading eyebrow="MAKE IT YOURS" title="Settings" subtitle="Your records are stored on your MongoDB server." />
+      <PageHeading eyebrow="MAKE IT YOURS" title="Settings" subtitle="Manage storage, budgets, CSV imports, and full JSON backups." />
       <section className="panel settings-panel">
         <h2>Your preferences</h2>
         <div className="db-setup-note">
@@ -277,6 +642,24 @@ export function SettingsPage({ databaseStatus }: { databaseStatus: DatabaseStatu
           <span className={`db-status ${databaseStatus}`}><i />{databaseStatus === 'connected' ? 'MongoDB connected' : databaseStatus === 'connecting' ? 'Checking connection…' : 'Waiting for MongoDB configuration'}</span>
         </div>
         <div className="setting-row"><div><b>Currency</b><small>Used for balances and reports</small></div><span>₹ Indian Rupee (INR)</span></div>
+        <div className="setting-row">
+          <div><b>Monthly budgets</b><small>Configure overall or category spending limits</small></div>
+          <button type="button" className="outline-button" disabled={isLoading} onClick={onManageBudgets}><SlidersHorizontal size={13} /> Configure</button>
+        </div>
+        <div className="setting-row">
+          <div><b>CSV statement import</b><small>Import bank or UPI exports with automatic category detection</small></div>
+          <button type="button" className="outline-button" disabled={isLoading} onClick={onImportCsv}><Upload size={13} /> Import CSV</button>
+        </div>
+        <div className="setting-row">
+          <div><b>Full JSON backup</b><small>Export or restore all transactions, KhataBook, groups, and budgets</small></div>
+          <div className="flex items-center gap-2">
+            <button type="button" className="outline-button" disabled={isLoading} onClick={onExportBackup}><Download size={13} /> Export JSON</button>
+            <label className="outline-button cursor-pointer">
+              <Upload size={13} /> Restore JSON
+              <input type="file" accept="application/json,.json" className="hidden" disabled={isLoading} onChange={(event) => { void handleBackupFile(event); }} />
+            </label>
+          </div>
+        </div>
       </section>
     </>
   );

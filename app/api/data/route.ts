@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { authorized } from '@/lib/auth';
 export const runtime = 'nodejs';
-const allowed = new Set(['transactions', 'khata', 'groups', 'groupExpenses']);
+const allowed = new Set(['transactions', 'khata', 'groups', 'groupExpenses', 'budgets']);
 function collectionName(request: NextRequest) {
   const name = request.nextUrl.searchParams.get('collection') || '';
   return allowed.has(name) ? name : null;
